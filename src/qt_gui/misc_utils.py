@@ -6,7 +6,7 @@ import numpy as np
 from PySide6.QtWidgets import QWidget 
 from PySide6.QtGui import QPalette, QColor
 
-import pat3.utils as p3_u, pat3.algebra as p3_alp3_al
+import pat3.utils as p3_u, pat3.algebra as p3_al
 import pat3.vehicles.rotorcraft.multirotor_trajectory as p3_mt
 import pat3.vehicles.rotorcraft.multirotor_fdm as p3_mfdm
 
