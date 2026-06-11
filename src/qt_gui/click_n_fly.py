@@ -173,7 +173,7 @@ class FlightDirector:
             if np.all([s == DroneStatus.CONNECTED for s in drone_status]):
                 self.status = FDStatus.GETTING_READY
                 for i in self.ids:
-                  self.acs[i].goto_ref()  
+                  self.acs[i].goto_ref()
                 logger.debug('all drones connected, moving them to start pos')
         elif self.status == FDStatus.GETTING_READY:
             dist_to_start = [self.acs[i].dist_to_ref() for i in self.ids]
@@ -182,7 +182,7 @@ class FlightDirector:
                 logger.debug('all drones arrived to start, starting the show')
         elif self.status == FDStatus.GUIDING:
             for i in self.ids:
-                self.acs[i].follow_ref() 
+                self.acs[i].follow_ref()
 
     def on_pprz_connect(self, conf):
         logger.debug(f'{conf.id} ({conf.name}) connected')
@@ -235,6 +235,8 @@ class Application(QApplication):
         self.timer.start(50)
         self.t0, self.dt_control = time.time(), 0.1
 
+        self.is_guiding = False
+
 
     def on_quit(self):
         logger.debug('app on quit')
@@ -243,13 +245,16 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
-        self.window.log_text('started')
+        self.window.log_text('Take off and trajectory following started')
+
+        self.is_guiding = True
 
     def periodic(self):
         now = time.time()
         elapsed = now - self.t0
         if elapsed >= self.dt_control:
-            self.fd.run()
+            if self.is_guiding:
+                self.fd.run()
             self.t0 += self.dt_control
 
         acs = self.fd.get_acs()
