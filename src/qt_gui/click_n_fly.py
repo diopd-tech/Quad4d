@@ -173,7 +173,7 @@ class FlightDirector:
             if np.all([s == DroneStatus.CONNECTED for s in drone_status]):
                 self.status = FDStatus.GETTING_READY
                 for i in self.ids:
-                  self.acs[i].goto_ref()  
+                  self.acs[i].goto_ref()
                 logger.debug('all drones connected, moving them to start pos')
         elif self.status == FDStatus.GETTING_READY:
             dist_to_start = [self.acs[i].dist_to_ref() for i in self.ids]
@@ -182,7 +182,7 @@ class FlightDirector:
                 logger.debug('all drones arrived to start, starting the show')
         elif self.status == FDStatus.GUIDING:
             for i in self.ids:
-                self.acs[i].follow_ref() 
+                self.acs[i].follow_ref()
 
     def on_pprz_connect(self, conf):
         logger.debug(f'{conf.id} ({conf.name}) connected')

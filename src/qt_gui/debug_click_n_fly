@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Debug script for click_n_fly issues"""
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Test 1: Import check
+print("\n=== TEST 1: Checking imports ===")
+try:
+    from pprz_connect import PprzConnect
+    print("✓ pprz_connect OK")
+except Exception as e:
+    print(f"✗ pprz_connect ERROR: {e}")
+    sys.exit(1)
+
+try:
+    from pprzlink.message import PprzMessage
+    print("✓ pprzlink OK")
+except Exception as e:
+    print(f"✗ pprzlink ERROR: {e}")
+
+try:
+    from settings import PprzSettingsManager
+    print("✓ PprzSettingsManager OK")
+except Exception as e:
+    print(f"✗ PprzSettingsManager ERROR: {e}")
+
+try:
+    from guided_mode import GuidedMode
+    print("✓ GuidedMode OK")
+except Exception as e:
+    print(f"✗ GuidedMode ERROR: {e}")
+
+# Test 2: Message reception
+print("\n=== TEST 2: Checking Ivy messages ===")
+msg_counts = {'fp': 0, 'ep': 0}
+
+def on_fp(sender, msg):
+    msg_counts['fp'] += 1
+    print(f"✓ ROTORCRAFT_FP received from {sender}")
+
+def on_ep(sender, msg):
+    msg_counts['ep'] += 1
+    print(f"✓ EXTERNAL_POSE received from {sender}")
+
+def on_connect(conf):
+    print(f"✓ Aircraft connected: ID={conf.id}")
+
+try:
+    print("Connecting to Ivy...")
+    conn = PprzConnect(notify=on_connect)
+    conn.ivy.subscribe(on_fp, PprzMessage("telemetry", "ROTORCRAFT_FP"))
+    conn.ivy.subscribe(on_ep, PprzMessage("datalink", "EXTERNAL_POSE"))
+    print("✓ Ivy connected and subscribed")
+    
+    import time
+    print("Listening for 5 seconds...")
+    for i in range(5):
+        time.sleep(1)
+        print(f"  [{i+1}s] ROTORCRAFT_FP: {msg_counts['fp']}, EXTERNAL_POSE: {msg_counts['ep']}")
+    
+    conn.pprz_connect.shutdown()
+    
+except Exception as e:
+    print(f"✗ Ivy ERROR: {e}")
+    import traceback
+    traceback.print_exc()
+
+print("\n=== Summary ===")
+if msg_counts['fp'] > 0:
+    print("✓ ROTORCRAFT_FP is being received")
+else:
+    print("✗ NO ROTORCRAFT_FP messages - check GCS telemetry")
+
+if msg_counts['ep'] > 0:
+    print("✓ EXTERNAL_POSE is being received")
+else:
+    print("✗ NO EXTERNAL_POSE - no vision/positioning system sending data")
