@@ -162,8 +162,8 @@ class FlightDirector:
         try:
             ac = self.acs[int(sender)]
             #print("pose bine mis à jour")
-        except KeyError: pass # unknown
-        ac.pose_source = 'external'                 
+        except KeyError: return # unknown
+        ac.pose_source = 'external'
         ac.set_pose(T)
 
     def run(self): # for now called from GUI thread, maybe use our own thread?
