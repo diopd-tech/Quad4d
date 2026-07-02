@@ -46,26 +46,29 @@ class ThreeDWidget(gl.GLViewWidget):
 
 
     def display_new_trajectory(self, model, idx=0, show_details=True, show_super_details=False,
-                               show_quad=True, show_ref_quad=False):
+                               show_quad=True, show_ref_quad=False, show_ref_traj=True):
         logger.debug('in display_new_trajectory')
-        trj = TrajItem(model.get_trajectory(idx), self, idx, show_details, show_super_details, show_quad, show_ref_quad)
+        trj = TrajItem(model.get_trajectory(idx), self, idx, show_details, show_super_details,
+                       show_quad, show_ref_quad, show_ref_traj)
         if idx < len(self.traj_items):
             self.traj_items[idx].remove(self)
             self.traj_items[idx] = trj
         else:
             self.traj_items.append(trj)
-        
+
     def update_plot(self, model, idx=0):
         logger.debug('in update_trajectory')
         self.traj_items[idx].update(model.get_trajectory(idx))
 
-    def set_trajectories(self, model, show_details=False, show_quad=True, show_ref_quad=True):
+    def set_trajectories(self, model, show_details=False, show_quad=True, show_ref_quad=True,
+                         show_ref_traj=True):
         """Replace all displayed trajectories with the ones from model
         (used when swapping to a different scenario at runtime)."""
         n_new = model.trajectory_nb()
         for i in range(n_new):
             self.display_new_trajectory(model, i, show_details=show_details,
-                                        show_quad=show_quad, show_ref_quad=show_ref_quad)
+                                        show_quad=show_quad, show_ref_quad=show_ref_quad,
+                                        show_ref_traj=show_ref_traj)
         while len(self.traj_items) > n_new:
             self.traj_items.pop().remove(self)
 
@@ -160,7 +163,7 @@ class TrajItem:
                (1.  , 0.5, 0.055, 1),
                (0.17, 0.63, 0.17, 1)]
     
-    def __init__(self, traj, parent, idx, show_details, show_super_details, show_quad=False, show_ref_quad=False):
+    def __init__(self, traj, parent, idx, show_details, show_super_details, show_quad=False, show_ref_quad=False, show_ref_traj=True):
         self.waypoints_item = None
         self.waypoints_text_items = None
         self.waypoints_line_item = None
@@ -202,6 +205,7 @@ class TrajItem:
         Ys = np.array([traj.get(t) for t in time])
         self.ref_traj_line_item = gl.GLLinePlotItem(pos=Ys[:,:3,0], color=my_color, width=3., antialias=True, mode='lines')
         parent.addItem(self.ref_traj_line_item)
+        self.ref_traj_line_item.setVisible(show_ref_traj)
         self.traj_line_item = gl.GLLinePlotItem(pos=np.zeros((1,3)), color=my_color_faded, width=2., antialias=True)
         parent.addItem(self.traj_line_item)
 
@@ -226,7 +230,9 @@ class TrajItem:
         if self.waypoints_text_items is not None:
             for it in self.waypoints_text_items: parent.removeItem(it)
         parent.removeItem(self.ref_traj_line_item)
+        if self.traj_line_item is not None: parent.removeItem(self.traj_line_item)
         parent.removeItem(self.quad_item)
+        parent.removeItem(self.ref_quad_item)
 
     def set_quad_pose(self, Tenu2flu):
         self.quad_item.setTransform(pg.Transform3D(Tenu2flu))

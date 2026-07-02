@@ -31,7 +31,10 @@ class MainWindow(QMainWindow):
         self.resize(1280,900)
         self.tdw = vtd.ThreeDWidget()
         for i in range(len(ids)):
-            self.tdw.display_new_trajectory(model, i, show_details=False, show_quad=True, show_ref_quad=True)
+            # spectator view: hide the reference path so the choreography
+            # isn't revealed to the audience in advance
+            self.tdw.display_new_trajectory(model, i, show_details=False, show_quad=True,
+                                            show_ref_quad=True, show_ref_traj=False)
         self.setCentralWidget(self.tdw)
 
     def set_quad_pose(self, T, i): self.tdw.set_quad_pose(T, i)
@@ -313,7 +316,8 @@ class Application(QApplication):
 
         self.model = new_model
         self.window.tdw.set_trajectories(new_model, show_details=False,
-                                         show_quad=True, show_ref_quad=True)
+                                         show_quad=True, show_ref_quad=True,
+                                         show_ref_traj=False)  # spectator: no reference path
         self.operator_view.load_show(new_model, self.fd, scenario)
 
         name = getattr(scenario, "name", None) or scenario.__class__.__name__
