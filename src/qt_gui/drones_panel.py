@@ -73,6 +73,7 @@ class _DroneRow(QFrame):
 
 
         self.lbl_metrics = QLabel()
+        self.lbl_metrics.setWordWrap(True)
         self.lbl_metrics.setStyleSheet(
             f"color:{_MUTED}; font-size:11px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")

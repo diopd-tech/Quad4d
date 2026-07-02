@@ -131,7 +131,7 @@ class OperatorWindow(QMainWindow):
                                             show_quad=True, show_ref_quad=True)
         left.addWidget(self.tdw, stretch=1)
         left.addWidget(self._build_console_group())
-        body.addLayout(left, stretch=3)
+        body.addLayout(left, stretch=4)
 
         # right: column of panels
         panels = QVBoxLayout()
@@ -150,9 +150,9 @@ class OperatorWindow(QMainWindow):
         panels.addStretch(1)
 
         right = QWidget()
-        right.setMinimumWidth(300)
+        right.setMinimumWidth(360)
         right.setLayout(panels)
-        body.addWidget(right)
+        body.addWidget(right, stretch=1)
 
         outer.addLayout(body, stretch=1)
 
