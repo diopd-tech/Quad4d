@@ -174,7 +174,6 @@ class OperatorWindow(QMainWindow):
         scen = getattr(self.app, "scenario", None)
         scen_name = scen.__class__.__name__ if scen is not None else "?"
         ids = list(getattr(scen, "ids", []) or [])
-        trajs = list(getattr(scen, "trajs", []) or [])
 
         self.label_scen = QLabel(scen_name)
         self.label_scen.setObjectName("scenName")
@@ -185,11 +184,6 @@ class OperatorWindow(QMainWindow):
 
         v.addWidget(self.label_scen)
         v.addWidget(info)
-        if trajs:
-            traj_lbl = QLabel("Trajectories: " + ", ".join(trajs))
-            traj_lbl.setObjectName("scenInfo")
-            traj_lbl.setWordWrap(True)
-            v.addWidget(traj_lbl)
         return group
 
     def _build_safety_group(self):
