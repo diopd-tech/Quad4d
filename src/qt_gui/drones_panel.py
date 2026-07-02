@@ -79,7 +79,7 @@ class _DroneRow(QFrame):
         v.addWidget(self.lbl_metrics)
 
         self.set_status("UNKNOWN")
-        self.set_values(None, None, None)
+        self.set_values(None, None, None, None)
 
 
     def set_status(self, status_name):
@@ -93,14 +93,17 @@ class _DroneRow(QFrame):
         self.lbl_traj.setToolTip(name)
 
 
-    def set_values(self, alt, spd, dist):
-        def cell(label, value, unit, fmt):
+    def set_values(self, alt, spd, dist, batt=None):
+        def cell(label, value, unit, fmt, color=_VALUE):
             v = (fmt % value + unit) if value is not None else "\u2014"
-            return f'{label} <span style="color:{_VALUE}">{v}</span>'
+            return f'{label} <span style="color:{color}">{v}</span>'
+        # TODO: color batt red below a low-voltage threshold once the
+        # battery's cell count is known (need volts/cell, not just pack V).
         self.lbl_metrics.setText(
             cell("alt", alt, "m", "%.2f") + "   "
             + cell("spd", spd, "m/s", "%.1f") + "   "
-            + cell("dist", dist, "m", "%.2f"))
+            + cell("dist", dist, "m", "%.2f") + "   "
+            + cell("batt", batt, "V", "%.1f"))
 
 
 class DronesPanel(QGroupBox):
@@ -177,9 +180,10 @@ class DronesPanel(QGroupBox):
                 continue
 
             row.set_status(getattr(ac.status, "name", "UNKNOWN"))
+            batt = getattr(ac, "battery_v", None)
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
-                row.set_values(None, None, None)
+                row.set_values(None, None, None, batt)
                 self._prev.pop(_id, None)
                 continue
 
@@ -198,4 +202,4 @@ class DronesPanel(QGroupBox):
                     self._speed[_id] = v_est
             self._prev[_id] = (pos, now)
 
-            row.set_values(alt, v_est, dist)
+            row.set_values(alt, v_est, dist, batt)

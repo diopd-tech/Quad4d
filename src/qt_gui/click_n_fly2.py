@@ -63,6 +63,7 @@ class Drone:
         self.vehicle_traj_max_len, self.vehicle_traj_increment = 1000, 100
         # maybe? https://github.com/eric-wieser/numpy_ringbuffer/blob/master/numpy_ringbuffer/__init__.py
         self.status = DroneStatus.UNKNOWN
+        self.battery_v = None
 
     def connect(self, conf, ivy):
         self.conf = conf
@@ -110,6 +111,7 @@ class FlightDirector:
         self.pprz_connect = PprzConnect(notify=self.on_pprz_connect)
         self.pprz_connect.ivy.subscribe(self.on_pprz_flight_param, PprzMessage("telemetry", "ROTORCRAFT_FP"))
         self.pprz_connect.ivy.subscribe(self.on_pprz_external_pose, PprzMessage("datalink", "EXTERNAL_POSE"))
+        self.pprz_connect.ivy.subscribe(self.on_pprz_status, PprzMessage("telemetry", "ROTORCRAFT_STATUS"))
         self.status = FDStatus.STAGING
         self.ids, self.acs = ids, {}
         for _id in self.ids:
@@ -176,9 +178,15 @@ class FlightDirector:
         try:
             ac = self.acs[sender]
         except KeyError: return # unknown aircraft
-        if getattr(ac, 'pose_source', None) == 'external':  
+        if getattr(ac, 'pose_source', None) == 'external':
             return
         ac.set_pose(T)
+
+    def on_pprz_status(self, sender, msg):
+        try:
+            ac = self.acs[sender]
+        except KeyError: return # unknown aircraft
+        ac.battery_v = float(msg['vsupply'])
 
     def get_acs(self): return self.acs
     def quit(self):
