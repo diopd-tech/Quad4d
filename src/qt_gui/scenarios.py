@@ -5,69 +5,85 @@ class Scenario:
     pass
 
 class Scenario1:
+    desc  = 'single circle with intro'
     ids= [112]
     trajs= ["circle_with_intro1"]
 
 class Scenario2:
+    desc  = 'two circles with intro'
     ids= [112, 113]
     trajs= ["circle_with_intro1", "circle_with_intro2"]
 
 class Scenario3:
+    desc  = 'three circles with intro'
     ids= [112, 113, 114]
     trajs= ["circle_with_intro1", "circle_with_intro2", "circle_with_intro3"]
 
 class Scenario4:
+    desc  = 'four circles with intro'
     ids= [112, 113, 114, 115]
     trajs= ["circle_with_intro1", "circle_with_intro2", "circle_with_intro3", "circle_with_intro112"]
 
 class Scenario5:
+    desc  = 'two back-and-forth'
     ids= [112, 113]
     trajs= ["smooth_back_and_forth1", "smooth_back_and_forth2"]
 
 class Scenario6:
+    desc  = 'gate race, solo'
     ids = [112]
     trajs = ["space indexed gate race1"]
     arena = "data/arena_3.yaml"
 
 class Scenario7:
+    desc  = 'scara race, solo'
     ids = [112]
     trajs = ["scara race"]
     arena = "data/arena_112.yaml"
 
 class Scenario8:
+    desc  = 'circle then back-and-forth'
     ids= [112]
     trajs= ["cercle_back_and_forth"]
 
 class Scenario9:
+    desc  = 'mixed: back-and-forth, gate race, circle'
     ids= [112, 113, 114]
     trajs= ["smooth_back_and_forth1", "space indexed gate race1", "circle_with_intro1"]
 
 class Scenario10:
+    desc  = 'mixed: oval, figure-of-eight, gate race'
     ids= [112, 113, 114]
     trajs= ["space indexed oval", "space indexed figure of height2", "space indexed gate race1"]
 
 
 class Scenario11:
+    desc  = 'follow-the-leader, 3 drones'
     ids= [112, 113, 114]
     trajs= ["queue leu leu 1", "queue leu leu 2", "queue leu leu 3"]
 
 class Scenario12:
+    desc  = 'race track and slalom'
     ids= [112, 113]
     trajs= ["space indexed race track 1", "space indexed slalon"]
 
 class Scenario13:
+    desc  = 'follow-the-leader, 2 drones'
     ids= [112, 113]
     trajs= ["queue leu leu 1", "queue leu leu 2"]
 
 class Scenario14:
+    desc  = 'two figure-of-eight'
     ids= [112, 113]
     trajs= ["space indexed figure of height", "space indexed figure of height3"]
 
-class Scenario15: 
+class Scenario15:
+    desc  = 'two concentric safe circles'
     ids = [112, 113]
     trajs = ["cercle safe 1", "cercle safe 2"]
 
-class Scenario16: 
+class Scenario16:
+    desc  = 'three concentric safe circles'
     ids = [112, 113, 114]
     trajs = ["cercle safe 1", "cercle safe 2", "cercle safe 3"]
 

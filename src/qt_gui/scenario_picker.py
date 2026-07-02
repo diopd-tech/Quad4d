@@ -17,8 +17,12 @@ STYLE = """
         background-color: #1B201D; border: 1px solid #2A312D;
         border-radius: 6px; color: #E8ECEA; font-size: 12px; padding: 4px;
     }
-    QListWidget::item { padding: 6px; border-radius: 4px; }
-    QListWidget::item:selected { background-color: #232925; color: #FFFFFF; }
+    QListWidget::item { padding: 7px 8px; border-radius: 4px; color: #B7BEB9; }
+    QListWidget::item:hover { background-color: #232925; }
+    QListWidget::item:selected {
+        background-color: #3A423D; color: #FFFFFF;
+        border-left: 3px solid #E8ECEA;
+    }
 
     QGroupBox {
         background-color: #1B201D; border: 1px solid #2A312D;
