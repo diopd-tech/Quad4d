@@ -539,24 +539,32 @@ class ScaraRace(p_mt.CompositeTraj):
         super().__init__(steps)
 
 
-class SpiraleMontanteA(p_mt.Circle):
-    name, desc = 'spirale montante a', 'helice 1/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
-    def __init__(self):
-        r, v, a0, N = 2., 2., 0., 2;          om = v/r;  om_z = om/(2*N)
-        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
-class SpiraleMontanteB(p_mt.Circle):
-    name, desc = 'spirale montante b', 'helice 2/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
-    def __init__(self):
-        r, v, a0, N = 2., 2., 2*np.pi/3, 2;   om = v/r;  om_z = om/(2*N)
-        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
-class SpiraleMontanteC(p_mt.Circle):
-    name, desc = 'spirale montante c', 'helice 3/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
-    def __init__(self):
-        r, v, a0, N = 2., 2., 4*np.pi/3, 2;   om = v/r;  om_z = om/(2*N)
-        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+class ClosedLoop(p_mt.CompositeTraj):
+    """Wrap a trajectory whose start != end so it loops without a jump.
+    Appends a smooth min-snap segment from the end state back to the
+    start state; SmoothLine matches the full flat output (position AND
+    derivatives) at both ends, so the join is velocity/accel-continuous."""
+    def __init__(self, traj, return_duration=4.):
+        Y_end   = traj.get(traj.duration)
+        Y_start = traj.get(0.)
+        return_seg = p_mt.SmoothLine(Y_end, Y_start, duration=return_duration)
+        p_mt.CompositeTraj.__init__(self, [traj, return_seg])
+
+
+def _spirale_montante(a0):
+    r, v, N = 2., 2., 2;   om = v/r;  om_z = om/(2*N)
+    return p_mt.Circle([0,0,4.], r=r, v=v, alpha0=a0,
+                       psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+
+class SpiraleMontanteA(ClosedLoop):
+    name, desc = 'spirale montante a', 'helice 1/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    def __init__(self): super().__init__(_spirale_montante(0.))
+class SpiraleMontanteB(ClosedLoop):
+    name, desc = 'spirale montante b', 'helice 2/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    def __init__(self): super().__init__(_spirale_montante(2*np.pi/3))
+class SpiraleMontanteC(ClosedLoop):
+    name, desc = 'spirale montante c', 'helice 3/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    def __init__(self): super().__init__(_spirale_montante(4*np.pi/3))
 
 
 
