@@ -71,6 +71,8 @@ class Drone:
         self.status = DroneStatus.CONNECTED
         
     def take_control(self):
+        if self.status == DroneStatus.UNKNOWN:
+            return
         self.settings['auto2'] = 'Guided'
         self.guided.move_at_ned_vel(self.conf.id) # set zero speed
 
@@ -234,6 +236,12 @@ class Application(QApplication):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
         self.operator_view.log_text('Take off and trajectory following started')
+        # re-arm Guided mode: a no-op for drones connecting for the first
+        # time (already armed in on_pprz_connect), but required for drones
+        # released to NAV by a previous Stop (e.g. before a scenario switch)
+        for ac_id in self.fd.ids:
+            self.fd.acs[ac_id].take_control()
+        self.fd.status = FDStatus.STAGING
         self.is_guiding = True
         self.operator_view.button_guide.setEnabled(False)
         self.operator_view.button_restart.setEnabled(False)
