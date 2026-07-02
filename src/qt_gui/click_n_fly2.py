@@ -112,6 +112,7 @@ class FlightDirector:
         self.ids, self.acs = ids, {}
         for _id in self.ids:
             self.acs[_id] = Drone()
+        self.known_confs = {}  # every conf ever seen, even for ids not currently in acs
         self.t0 = 0.
         self.duree_du_show = self.trajectories.trajectory_duration()  #POur avoir la durée du show
         
@@ -160,8 +161,10 @@ class FlightDirector:
 
     def on_pprz_connect(self, conf):
         logger.debug(f'{conf.id} ({conf.name}) connected')
-        self.acs[int(conf.id)].connect(conf, self.pprz_connect.ivy)
-        self.acs[int(conf.id)].take_control()
+        self.known_confs[int(conf.id)] = conf
+        if int(conf.id) in self.acs:
+            self.acs[int(conf.id)].connect(conf, self.pprz_connect.ivy)
+            self.acs[int(conf.id)].take_control()
         
     def on_pprz_flight_param(self, sender, msg):
         pos_enu = [float(msg[_c])/2**8 for _c in ['east', 'north', 'up']]
@@ -282,9 +285,22 @@ class Application(QApplication):
 
         # reuse Drone objects (and their live Ivy/settings connection) for
         # ids already known to the flight director; ids new to this
-        # scenario start out unconnected, same as at startup.
+        # scenario but already seen on the Ivy bus get adopted immediately
+        # (their original on_pprz_connect notification was lost since they
+        # weren't tracked yet); truly new ids start out unconnected.
         old_acs = self.fd.acs
-        self.fd.acs = {_id: old_acs[_id] if _id in old_acs else Drone() for _id in ids}
+        new_acs = {}
+        for _id in ids:
+            if _id in old_acs:
+                new_acs[_id] = old_acs[_id]
+                continue
+            drone = Drone()
+            conf = self.fd.known_confs.get(_id)
+            if conf is not None:
+                drone.connect(conf, self.fd.pprz_connect.ivy)
+                drone.take_control()
+            new_acs[_id] = drone
+        self.fd.acs = new_acs
         self.fd.ids = ids
         self.fd.trajectories = new_model
         self.fd.duree_du_show = new_model.trajectory_duration()
