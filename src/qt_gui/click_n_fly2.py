@@ -3,11 +3,8 @@ import sys, time, signal, logging, yaml, argparse
 import numpy as np
 from enum import Enum
 
-from PySide6.QtWidgets import (QApplication, QMainWindow, QDialog, QLabel,
-                               QPushButton, QProgressBar, QPlainTextEdit,
-                               QVBoxLayout, QHBoxLayout, QWidget, QGroupBox, QComboBox)
+from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
-from PySide6.QtGui import QFont
 # https://www.pythonguis.com/tutorials/multithreading-pyside6-applications-qthreadpool/
 
 import traj_factory, misc_utils as mu
@@ -19,38 +16,9 @@ from pprz_connect import PprzConnect
 from pprzlink.message import PprzMessage
 from settings import PprzSettingsManager
 from guided_mode import GuidedMode
+from operator_window import OperatorWindow
 
 logger = logging.getLogger(__name__)
-
-
-class GuidanceDialog(QDialog):
-    def __init__(self, parent, cbk, cbk_restart, cbk_stop):
-        super().__init__(parent)
-        self.setWindowTitle("Guide Quadrotor")
-        self.resize(800,600)
-        self.textedit_wid = QPlainTextEdit()
-        self.textedit_wid.setReadOnly(True)
-        self.button_guide = QPushButton("Guide")
-        self.button_restart = QPushButton("Restart Show")
-        self.button_restart.setEnabled(False)
-        self.button_stop = QPushButton("Stop Show")
-        self.button_stop.setEnabled(False)
-        self.progress = QProgressBar()
-        self.progress.setTextVisible(True)
-        layout = QVBoxLayout()
-        layout.addWidget(self.textedit_wid)
-        layout.addWidget(self.button_guide)
-        layout.addWidget(self.button_restart)
-        layout.addWidget(self.button_stop)
-        layout.addWidget(self.progress)
-        self.setLayout(layout)
-        #self.textedit_wid.setPlainText(str('12345'))
-        self.button_guide.clicked.connect(cbk)
-        self.button_restart.clicked.connect(cbk_restart)
-        self.button_stop.clicked.connect(cbk_stop)
-
-    def show_progress(self, value): self.progress.setValue(value)
-    def log_text(self, txt): self.textedit_wid.appendPlainText(txt)
 
 
 class MainWindow(QMainWindow):
@@ -63,19 +31,9 @@ class MainWindow(QMainWindow):
             self.tdw.display_new_trajectory(model, i, show_details=False, show_quad=True, show_ref_quad=True)
         self.setCentralWidget(self.tdw)
 
-        self.dialog = GuidanceDialog(self, controller.on_guide_clicked, controller.on_restart_clicked, controller.on_stop_clicked)
-        self.dialog.show()
-
     def set_quad_pose(self, T, i): self.tdw.set_quad_pose(T, i)
     def set_ref_pose(self, T, i): self.tdw.set_ref_pose(T, i)
     def update_vehicle_traj(self, vehicle_traj, i): self.tdw.update_vehicle_traj(vehicle_traj, i)
-    def set_restart_ready(self, ready):
-        self.dialog.button_restart.setEnabled(ready)
-        self.dialog.button_guide.setEnabled(not ready)   #see if it's a good solution
-    
-    def show_progress(self, p): self.dialog.show_progress(p)
-    def log_text(self, t): self.dialog.log_text(t)
-    
 
     def closeEvent(self, event):
         logger.debug('x button clicked')
@@ -239,11 +197,13 @@ class Application(QApplication):
         for traj_name in trajs:
             self.model.load_from_factory(traj_name)
 
-        self.model.resolve_conflicts(safety_distance=1.0, delay_increment=2.0)
-
         self.fd = FlightDirector(self.model, ids)
         self.window = MainWindow(self.model, ids, self)
+        self.window.setWindowTitle("Click'n Fly - Spectator view")
         self.window.show()
+
+        self.operator_view = OperatorWindow(self, self.model, self.fd)
+        self.operator_view.show()
 
         #self.threadpool = QThreadPool()
         #self.worker = None
@@ -262,30 +222,31 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
-        self.window.log_text('Take off and trajectory following started')
+        self.operator_view.log_text('Take off and trajectory following started')
         self.is_guiding = True
-        self.window.dialog.button_guide.setEnabled(False)
-        self.window.dialog.button_restart.setEnabled(False)
-        self.window.dialog.button_stop.setEnabled(True)
-        
+        self.operator_view.button_guide.setEnabled(False)
+        self.operator_view.button_restart.setEnabled(False)
+        self.operator_view.button_stop.setEnabled(True)
+
     def on_stop_clicked(self):
-        self.window.log_text("Show stopped: NAV Mode ")
+        self.operator_view.log_text("Show stopped: NAV Mode ")
         self.is_guiding = False
         self.fd.status = FDStatus.FINISHED
         for ac_id in self.fd.ids:
             self.fd.acs[ac_id].release()
-        self.window.dialog.button_guide.setEnabled(True)
-        self.window.dialog.button_restart.setEnabled(True)
-        self.window.dialog.button_stop.setEnabled(False)
+        self.operator_view.button_guide.setEnabled(True)
+        self.operator_view.button_restart.setEnabled(True)
+        self.operator_view.button_stop.setEnabled(False)
 
     def on_restart_clicked(self):
-        self.window.log_text('Restarting: Drones go back to starting point')
+        self.operator_view.log_text('Restarting: Drones go back to starting point')
         for ac_id in self.fd.ids:
             self.fd.acs[ac_id].take_control()
         self.fd.status = FDStatus.STAGING
         self.is_guiding = True
-        self.window.set_restart_ready(False)
-        self.window.dialog.button_stop.setEnabled(True)
+        self.operator_view.button_restart.setEnabled(False)
+        self.operator_view.button_guide.setEnabled(False)
+        self.operator_view.button_stop.setEnabled(True)
 
     def periodic(self):
         now = time.time()
@@ -293,14 +254,13 @@ class Application(QApplication):
         if elapsed >= self.dt_control:
             if self.is_guiding:
                 self.fd.run()
-                # if self.fd.status == FDStatus.FINISHED:
-                #     self.window.set_restart_ready(True)
+                self.operator_view.drones_panel.update_from_fd(self.fd)
             self.t0 += self.dt_control
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
             loop_elapsed = (time.time() - self.fd.t0) % self.fd.duree_du_show
             progress_percent= int((loop_elapsed / self.fd.duree_du_show) * 100)
-            self.window.show_progress(progress_percent)
+            self.operator_view.show_progress(progress_percent)
 
         acs = self.fd.get_acs()
         for i, ac_id in enumerate(self.fd.ids):
@@ -310,6 +270,12 @@ class Application(QApplication):
                 self.window.set_quad_pose(ac.T, i)
             except KeyError: pass # we don't know the drone pose yet
             self.window.update_vehicle_traj(np.array(ac.vehicle_traj), i)
+
+            self.operator_view.tdw.set_ref_pose(ac.Tref, i)
+            try:
+                self.operator_view.tdw.set_quad_pose(ac.T, i)
+            except KeyError: pass # we don't know the drone pose yet
+            self.operator_view.tdw.update_vehicle_traj(np.array(ac.vehicle_traj), i)
 
 
 scen1 = '''
