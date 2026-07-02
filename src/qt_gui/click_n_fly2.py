@@ -5,6 +5,8 @@ from enum import Enum
 
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
+from PySide6.QtGui import QGuiApplication
+QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 # https://www.pythonguis.com/tutorials/multithreading-pyside6-applications-qthreadpool/
 
 import traj_factory, misc_utils as mu
@@ -216,9 +218,13 @@ class Application(QApplication):
         self.is_guiding = False
 
     def on_quit(self):
+        if getattr(self, '_quitting', False):
+            return
+        self._quitting = True
         logger.debug('app on quit')
         self.fd.quit()
-         
+        self.quit()
+ 
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)

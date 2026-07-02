@@ -458,11 +458,11 @@ class ShowPulseC(p_mt.Circle):
 # --- Oval stack: two ovals at different heights (1.2m gap) and speeds.
 #     Constant vertical gap -> safe regardless of horizontal phase drift.
 class ShowOvalLow(p_mt.Oval):
-    name, desc = 'show oval low', 'oval l=2 r=1.5 v=2.0 z=1.8'
-    def __init__(self): super().__init__(l=2, r=1.5, v=2.0, z=1.8)
+    name, desc = 'show oval low', 'oval l=1.5 r=1.5 v=2.0 z=1.8'
+    def __init__(self): super().__init__(l=1.5, r=1.5, v=2.0, z=1.8)
 class ShowOvalHigh(p_mt.Oval):
-    name, desc = 'show oval high', 'oval l=2 r=1.5 v=2.4 z=3.0'
-    def __init__(self): super().__init__(l=2, r=1.5, v=2.4, z=3.0)
+    name, desc = 'show oval high', 'oval l=1.5 r=1.5 v=2.4 z=3.0'
+    def __init__(self): super().__init__(l=1.5, r=1.5, v=2.4, z=3.0)
 
 
 # --- Lissajous 3:2 (analytic, solo). Closed loop on [0, 2pi/om].

@@ -148,6 +148,9 @@ class OperatorWindow(QMainWindow):
         self.setStyleSheet(STYLE)
         self._set_safety_state("Unverified", "warn")
 
+    def closeEvent(self, event):
+        self.app.on_quit()
+        event.accept()
 
     def _build_header(self):
         box = QWidget()
