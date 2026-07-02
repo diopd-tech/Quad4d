@@ -6,6 +6,7 @@ from enum import Enum
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
 # https://www.pythonguis.com/tutorials/multithreading-pyside6-applications-qthreadpool/
+QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
 import traj_factory, misc_utils as mu
 import view_three_d as vtd, model
