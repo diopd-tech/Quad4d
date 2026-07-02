@@ -31,7 +31,7 @@ _MUTED = "#8B938F"
 PANEL_STYLE = """
 QGroupBox#dronesPanel {
     background-color: #1B201D; border: 1px solid #2A312D;
-    border-radius: 9px; margin-top: 0px; padding: 9px;
+    border-radius: 6px; margin-top: 0px; padding: 7px;
 }
 """
 
@@ -45,10 +45,10 @@ class _DroneRow(QFrame):
        
         self.setStyleSheet(
             "QFrame { background:#202622; border:1px solid #2A312D;"
-            f" border-left:3px solid {color}; border-radius:6px; }}")
+            f" border-left:3px solid {color}; border-radius:5px; }}")
 
         v = QVBoxLayout(self)
-        v.setContentsMargins(9, 6, 9, 6)
+        v.setContentsMargins(7, 5, 7, 5)
         v.setSpacing(2)
 
        

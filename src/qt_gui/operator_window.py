@@ -15,17 +15,17 @@ STYLE = """
     QWidget#root { background-color: #131715; }
 
     QLabel { color: #E8ECEA; font-size: 13px; }
-    QLabel#appTitle    { color: #FFFFFF; font-size: 20px; font-weight: 700; }
-    QLabel#appSubtitle { color: #8B938F; font-size: 12px; }
-    QLabel#scenName    { color: #F2820C; font-size: 14px; font-weight: 600; }
-    QLabel#scenInfo    { color: #8B938F; font-size: 12px; }
+    QLabel#appTitle    { color: #FFFFFF; font-size: 18px; font-weight: 600; }
+    QLabel#appSubtitle { color: #8B938F; font-size: 11px; }
+    QLabel#scenName    { color: #E8ECEA; font-size: 13px; font-weight: 600; }
+    QLabel#scenInfo    { color: #8B938F; font-size: 11px; }
 
     QGroupBox {
         background-color: #1B201D;
         border: 1px solid #2A312D;
-        border-radius: 10px;
-        margin-top: 16px;
-        padding: 14px;
+        border-radius: 6px;
+        margin-top: 10px;
+        padding: 10px;
         font-size: 11px;
         font-weight: 600;
         color: #6E7770;
@@ -33,18 +33,18 @@ STYLE = """
     QGroupBox::title {
         subcontrol-origin: margin;
         subcontrol-position: top left;
-        left: 14px;
+        left: 10px;
         padding: 2px 6px;
         color: #6E7770;
     }
-    QGroupBox#compact { margin-top: 12px; padding: 9px; }
+    QGroupBox#compact { margin-top: 8px; padding: 8px; }
 
     QPushButton {
         background-color: #232925;
         color: #E8ECEA;
         border: 1px solid #353D38;
-        border-radius: 8px;
-        padding: 10px 14px;
+        border-radius: 6px;
+        padding: 8px 12px;
         font-size: 13px;
         font-weight: 600;
     }
@@ -56,17 +56,17 @@ STYLE = """
 
     /* Primary button: launch the show */
     QPushButton#primary {
-        background-color: #1F9D57; border: 1px solid #29B468;
-        color: #FFFFFF; font-size: 14px; padding: 9px;
+        background-color: #E8ECEA; border: 1px solid #E8ECEA;
+        color: #131715; font-size: 14px; padding: 8px;
     }
-    QPushButton#primary:hover    { background-color: #29B468; }
+    QPushButton#primary:hover    { background-color: #FFFFFF; }
     QPushButton#primary:disabled {
-        background-color: #16301F; border: 1px solid #1E3A28; color: #4C6B57;
+        background-color: #2A312D; border: 1px solid #2A312D; color: #565E59;
     }
 
-    /* Warning button: graceful stop (back to NAV mode) */
+    /* Stop button: graceful stop (back to NAV mode) */
     QPushButton#warning {
-        background-color: #232925; border: 1px solid #C9700A; color: #F2820C;
+        background-color: #232925; border: 1px solid #353D38; color: #C7D0CB;
     }
     QPushButton#warning:hover    { background-color: #2B322D; }
     QPushButton#warning:disabled {
@@ -75,16 +75,16 @@ STYLE = """
 
     QProgressBar {
         background-color: #0E110F; border: 1px solid #2A312D;
-        border-radius: 6px; height: 12px; text-align: center;
+        border-radius: 5px; height: 10px; text-align: center;
         color: #8B938F; font-size: 11px;
     }
-    QProgressBar::chunk { background-color: #F2820C; border-radius: 5px; }
+    QProgressBar::chunk { background-color: #8B938F; border-radius: 4px; }
 
     QPlainTextEdit {
-        background-color: #0E110F; color: #84D99B;
-        border: 1px solid #2A312D; border-radius: 8px;
+        background-color: #0E110F; color: #C7D0CB;
+        border: 1px solid #2A312D; border-radius: 6px;
         font-family: "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
-        font-size: 12px; padding: 8px;
+        font-size: 12px; padding: 6px;
     }
 """
 
@@ -104,16 +104,16 @@ class OperatorWindow(QMainWindow):
         root.setObjectName("root")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(18, 18, 18, 18)
-        outer.setSpacing(14)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(10)
         outer.addWidget(self._build_header())
 
         body = QHBoxLayout()
-        body.setSpacing(12)
+        body.setSpacing(10)
 
         # left: 3D view (clone of the spectator view) + console below
         left = QVBoxLayout()
-        left.setSpacing(12)
+        left.setSpacing(10)
         self.tdw = vtd.ThreeDWidget(self.model)
         for i in range(self.model.trajectory_nb()):
             self.tdw.display_new_trajectory(self.model, i, show_details=False,
@@ -124,7 +124,7 @@ class OperatorWindow(QMainWindow):
 
         # right: column of panels
         panels = QVBoxLayout()
-        panels.setSpacing(12)
+        panels.setSpacing(10)
         panels.addWidget(self._build_scenario_group())
         colors = ['#%02X%02X%02X' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
                   for c in vtd.TrajItem._colors]
@@ -249,17 +249,17 @@ class OperatorWindow(QMainWindow):
         return group
 
     def _set_safety_state(self, text, kind):
-        """kind: 'warn' (orange) | 'ok' (green) | 'err' (red)."""
+        """kind: 'warn' (pending, neutral) | 'ok' (neutral) | 'err' (red)."""
         palette = {
-            "warn": ("#3A2A0E", "#F2820C"),
-            "ok":   ("#16331F", "#3FCF6B"),
+            "warn": ("transparent", "#8B938F"),
+            "ok":   ("transparent", "#C7D0CB"),
             "err":  ("#3A1518", "#F85149"),
         }
         bg, fg = palette.get(kind, palette["warn"])
         self.label_safety_status.setText(text)
         self.label_safety_status.setStyleSheet(
-            f"background-color:{bg}; color:{fg}; border-radius:6px;"
-            f"padding:4px 10px; font-weight:700;")
+            f"background-color:{bg}; color:{fg}; border-radius:4px;"
+            f"padding:2px 6px; font-weight:600;")
 
 
     """ def run_safety_check(self):
