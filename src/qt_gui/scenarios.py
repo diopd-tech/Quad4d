@@ -74,48 +74,59 @@ class Scenario16:
 
 
 class Scenario17:   # rotating triangle
+    desc  = 'rotating triangle'
     ids   = [112, 113, 114]
     trajs = ['show rosette a', 'show rosette b', 'show rosette c']
 
 class Scenario18:   # swirling tower
+    desc  = 'swirling tower'
     ids   = [112, 113, 114]
     trajs = ['show tornado inner', 'show tornado mid', 'show tornado outer']
 
 class Scenario19:   # counter-rotating rings
+    desc  = 'counter-rotating rings'
     ids   = [112, 113]
     trajs = ['show twin ring low', 'show twin ring high']
 
 class Scenario20:  # pulsing ring
+    desc  = 'pulsing ring'
     ids   = [112, 113, 114]
     trajs = ['show pulse a', 'show pulse b', 'show pulse c']
 
 class Scenario21:  # stacked ovals
+    desc  = 'stacked ovals'
     ids   = [112, 113]
     trajs = ['show oval low', 'show oval high']
 
 class Scenario22:  # lissajous solo
+    desc  = 'lissajous solo'
     ids   = [112]
     trajs = ['show lissajous']
 
 class Scenario23:  # star solo
+    desc  = 'star solo'
     ids   = [112]
     trajs = ['show star']
 
 
 class Scenario24:  # convergence a 3
+    desc  = 'convergence a 3'
     ids   = [112, 113, 114]
     trajs = ['conflit tri a', 'conflit tri b', 'conflit tri c']
 
 
 class Scenario25:   # spirale montante a 3 drones
+    desc  = 'spirale montante a 3 drones'
     ids   = [112, 113, 114]
     trajs = ['spirale a', 'spirale b', 'spirale c']
 
 class Scenario26:   # spirale a 2 drones
+    desc  = 'spirale a 2 drones'
     ids   = [112, 113]
-    trajs = ['spirale a', 'spirale c'] 
+    trajs = ['spirale a', 'spirale c']
 
 class Scenario27:   # vraie spirale montante a 3 drones
+    desc  = 'vraie spirale montante a 3 drones'
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 

@@ -172,7 +172,12 @@ class OperatorWindow(QMainWindow):
         v.setSpacing(2)
 
         scen = getattr(self.app, "scenario", None)
-        scen_name = scen.__class__.__name__ if scen is not None else "?"
+        if scen is not None:
+            scen_name = getattr(scen, "name", None) or scen.__class__.__name__
+            if getattr(scen, "desc", None):
+                scen_name += f" — {scen.desc}"
+        else:
+            scen_name = "?"
         ids = list(getattr(scen, "ids", []) or [])
 
         self.label_scen = QLabel(scen_name)

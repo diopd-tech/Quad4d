@@ -3,7 +3,7 @@ import sys, time, signal, logging, yaml, argparse
 import numpy as np
 from enum import Enum
 
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow, QDialog
 from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
 from PySide6.QtGui import QGuiApplication
 QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
@@ -19,6 +19,7 @@ from pprzlink.message import PprzMessage
 from settings import PprzSettingsManager
 from guided_mode import GuidedMode
 from operator_window import OperatorWindow
+from scenario_picker import ScenarioPickerDialog
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +191,11 @@ class Application(QApplication):
         self.setApplicationDisplayName("ClicknFly")
         self.setApplicationName("ClicknFly42")
 
-        self.scenario = cnf_scen.scenarios[int(args.scen)]()
+        picker = ScenarioPickerDialog(cnf_scen.scenarios, preselect=int(args.scen))
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            sys.exit(0)
+        self.scenario = picker.get_scenario()
         trajs, ids = self.scenario.trajs, self.scenario.ids
-        #scen = yaml.safe_load(scens[int(args.scen)])
-        #trajs, ids = scen['trajs'], scen['ids']
 
         self.model = model.Model()
         for traj_name in trajs:
