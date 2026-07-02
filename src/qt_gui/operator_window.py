@@ -86,6 +86,13 @@ STYLE = """
         font-family: "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
         font-size: 12px; padding: 6px;
     }
+
+    QMenuBar { background-color: #131715; color: #C7D0CB; }
+    QMenuBar::item { background: transparent; padding: 4px 10px; }
+    QMenuBar::item:selected { background-color: #232925; border-radius: 4px; }
+    QMenu { background-color: #1B201D; color: #E8ECEA; border: 1px solid #2A312D; }
+    QMenu::item { padding: 6px 20px; }
+    QMenu::item:selected { background-color: #232925; }
 """
 
 
@@ -99,6 +106,10 @@ class OperatorWindow(QMainWindow):
 
         self.setWindowTitle("Click'n Fly - Operator Control Center")
         self.resize(1200, 760)
+
+        scen_menu = self.menuBar().addMenu("Scenario")
+        change_scen_action = scen_menu.addAction("Change scenario...")
+        change_scen_action.triggered.connect(self.app.on_change_scenario_clicked)
 
         root = QWidget()
         root.setObjectName("root")
@@ -171,7 +182,18 @@ class OperatorWindow(QMainWindow):
         v = QVBoxLayout(group)
         v.setSpacing(2)
 
-        scen = getattr(self.app, "scenario", None)
+        self.label_scen = QLabel()
+        self.label_scen.setObjectName("scenName")
+
+        self.label_scen_info = QLabel()
+        self.label_scen_info.setObjectName("scenInfo")
+
+        v.addWidget(self.label_scen)
+        v.addWidget(self.label_scen_info)
+        self._update_scenario_labels(getattr(self.app, "scenario", None))
+        return group
+
+    def _update_scenario_labels(self, scen):
         if scen is not None:
             scen_name = getattr(scen, "name", None) or scen.__class__.__name__
             if getattr(scen, "desc", None):
@@ -179,17 +201,10 @@ class OperatorWindow(QMainWindow):
         else:
             scen_name = "?"
         ids = list(getattr(scen, "ids", []) or [])
-
-        self.label_scen = QLabel(scen_name)
-        self.label_scen.setObjectName("scenName")
-
-        info = QLabel(f"{len(ids)} drone(s)   |   IDs: "
-                      f"{', '.join(str(i) for i in ids) if ids else '-'}")
-        info.setObjectName("scenInfo")
-
-        v.addWidget(self.label_scen)
-        v.addWidget(info)
-        return group
+        self.label_scen.setText(scen_name)
+        self.label_scen_info.setText(
+            f"{len(ids)} drone(s)   |   IDs: "
+            f"{', '.join(str(i) for i in ids) if ids else '-'}")
 
     def _build_safety_group(self):
         group = QGroupBox("SAFETY CHECK")
@@ -293,3 +308,36 @@ class OperatorWindow(QMainWindow):
 
     def log_text(self, txt):
         self.textedit_wid.appendPlainText(txt)
+
+    def load_show(self, model, fd, scenario):
+        """Swap in a different model/flight director (used when the
+        operator changes scenario at runtime, after the current show
+        has been stopped)."""
+        self.model, self.fd = model, fd
+
+        self.tdw.set_trajectories(model, show_details=False,
+                                  show_quad=True, show_ref_quad=True)
+
+        colors = ['#%02X%02X%02X' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
+                  for c in vtd.TrajItem._colors]
+        trajs = [model.get_trajectory(i).name for i in range(model.trajectory_nb())]
+        self._replace_drones_panel(fd.ids, colors, trajs)
+
+        self._update_scenario_labels(scenario)
+        self._reset_controls()
+
+    def _replace_drones_panel(self, ids, colors, trajs):
+        layout = self.drones_panel.parentWidget().layout()
+        idx = layout.indexOf(self.drones_panel)
+        old_panel = self.drones_panel
+        self.drones_panel = DronesPanel(ids, colors, trajs)
+        layout.insertWidget(idx, self.drones_panel)
+        layout.removeWidget(old_panel)
+        old_panel.deleteLater()
+
+    def _reset_controls(self):
+        self.button_guide.setEnabled(False)
+        self.button_restart.setEnabled(False)
+        self.button_stop.setEnabled(False)
+        self.progress.setValue(0)
+        self._set_safety_state("Unverified", "warn")

@@ -55,9 +55,19 @@ class ThreeDWidget(gl.GLViewWidget):
         else:
             self.traj_items.append(trj)
         
-    def update_plot(self, model, idx=0): 
+    def update_plot(self, model, idx=0):
         logger.debug('in update_trajectory')
         self.traj_items[idx].update(model.get_trajectory(idx))
+
+    def set_trajectories(self, model, show_details=False, show_quad=True, show_ref_quad=True):
+        """Replace all displayed trajectories with the ones from model
+        (used when swapping to a different scenario at runtime)."""
+        n_new = model.trajectory_nb()
+        for i in range(n_new):
+            self.display_new_trajectory(model, i, show_details=show_details,
+                                        show_quad=show_quad, show_ref_quad=show_ref_quad)
+        while len(self.traj_items) > n_new:
+            self.traj_items.pop().remove(self)
 
     def set_quad_pose(self, Tenu2flu, idx=0):
         self.traj_items[idx].set_quad_pose(Tenu2flu)

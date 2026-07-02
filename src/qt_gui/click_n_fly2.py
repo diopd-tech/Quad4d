@@ -256,6 +256,49 @@ class Application(QApplication):
         self.operator_view.button_guide.setEnabled(False)
         self.operator_view.button_stop.setEnabled(True)
 
+    def on_change_scenario_clicked(self):
+        preselect = 0
+        current_name = getattr(self.scenario, "name", None)
+        for i, cls in enumerate(cnf_scen.scenarios):
+            if cls.__name__ == current_name:
+                preselect = i
+                break
+        picker = ScenarioPickerDialog(cnf_scen.scenarios, preselect=preselect,
+                                      parent=self.operator_view)
+        if picker.exec() == QDialog.DialogCode.Accepted:
+            self._load_scenario(picker.get_scenario())
+
+    def _load_scenario(self, scenario):
+        # bring the current show to a safe stop before tearing it down
+        if self.is_guiding:
+            self.on_stop_clicked()
+
+        self.scenario = scenario
+        trajs, ids = scenario.trajs, scenario.ids
+
+        new_model = model.Model()
+        for traj_name in trajs:
+            new_model.load_from_factory(traj_name)
+
+        # reuse Drone objects (and their live Ivy/settings connection) for
+        # ids already known to the flight director; ids new to this
+        # scenario start out unconnected, same as at startup.
+        old_acs = self.fd.acs
+        self.fd.acs = {_id: old_acs[_id] if _id in old_acs else Drone() for _id in ids}
+        self.fd.ids = ids
+        self.fd.trajectories = new_model
+        self.fd.duree_du_show = new_model.trajectory_duration()
+        self.fd.status = FDStatus.STAGING
+        self.fd.t0 = 0.
+
+        self.model = new_model
+        self.window.tdw.set_trajectories(new_model, show_details=False,
+                                         show_quad=True, show_ref_quad=True)
+        self.operator_view.load_show(new_model, self.fd, scenario)
+
+        name = getattr(scenario, "name", None) or scenario.__class__.__name__
+        self.operator_view.log_text(f"Scenario changed: {name}")
+
     def periodic(self):
         now = time.time()
         elapsed = now - self.t0
