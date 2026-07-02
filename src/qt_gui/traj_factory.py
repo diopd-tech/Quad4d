@@ -307,19 +307,25 @@ class Traj50(Traj45):
 #Let's try a queue leu leu showcase
 class QueueLeuLeu(p_mt_dev.SpaceIndexedTraj):
     name, desc = 'queue leu leu', 'Space indexed waypoint example 7'
-    def __init__(self, wps=None, delay=0.0):
+    def __init__(self, wps=None, delay=0.0, phase=0.0):
         if wps is None:
-            wps = [[-2, 3, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3], 
-               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2], 
+            wps = [[-2, 3, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3],
+               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2],
                [0.5, 2.5, 1.5], [-2, 3, 1]]
         self.wps = np.array(wps)
         self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps, bc="periodic")
         self.duration = 20.0
-        if delay > 0.0:
+        if phase > 0.0:
+            # follow-the-leader by SPATIAL offset along the (periodic) path:
+            # start at lambda=phase and ramp continuously to phase+1 over the
+            # duration. Drones stay spaced like beads on the loop instead of
+            # waiting on top of each other at the shared start point.
+            self.dyn_traj = p_t1d.AffOne((0, phase), (self.duration, phase + 1.))
+        elif delay > 0.0:
             dyn_pts = [[0,0],[delay, 0], [delay + self.duration, 1.]]
             dyn_segments = [p_t1d.AffOne(dyn_pts[i], dyn_pts[i+1]) for i in range(len(dyn_pts)-1)]
             self.dyn_traj = p_t1d.SmoothedCompositeOne(dyn_segments, eps=0.01)
-        else: 
+        else:
             self.dyn_traj = p_t1d.AffOne((0,0),(self.duration,1))
 
         super().__init__(self.wp_traj, self.dyn_traj)
@@ -341,9 +347,11 @@ class QueueLeuLeu2(QueueLeuLeu):
         super().__init__(wps=wps_2, delay=0.0)
 
 class QueueLeuLeu3(QueueLeuLeu):
-    name, desc = 'queue leu leu 3', 'Course with delay3'
+    name, desc = 'queue leu leu 3', 'Course, 0.3 phase offset (was delay=6)'
     def __init__(self):
-        super().__init__(delay=6.0)
+        # 6s behind on a 20s periodic loop -> 0.3 of the loop; start a third
+        # of the way along the path so it never shares the start with qll1.
+        super().__init__(phase=0.7)
        
 
 # Dans traj_factory.py
