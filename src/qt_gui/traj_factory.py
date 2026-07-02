@@ -112,9 +112,20 @@ class Donut1(p_mt.CompositeTraj):
         super().__init__(steps)
 
 
+class cercle_back_and_forth(p_mt.CompositeTraj):
+    name, desc = 'cercle_back_and_forth', 'cicle followed by back and forth'
+    def __init__(self):
+        fig1 = Traj62()
+        fig2 = Traj81()
 
+        Y_fin_fig1 = fig1.get(fig1.duration)
+        Y_debut_fig2 = fig2.get(0)
 
-        
+        steps = [fig1, 
+            p_mt.SmoothLine(Y_fin_fig1, Y_debut_fig2, duration=5.), 
+            fig2
+            ]
+        super().__init__(steps)
 
 class Traj17(p_mt.Trajectory):
     name, desc = 'sphere0', 'sphere0'
@@ -180,7 +191,8 @@ class Traj42(p_mt_dev.SpaceIndexedTraj):
         self.dyn_traj = p_t1d.SmoothedCompositeOne(self.dyn_segments, eps=0.75)
         self.traj = p_mt_dev.SpaceIndexedTraj(self.wp_traj, self.dyn_traj)
         #super().__init__(self.wp_traj, self.dyn_smoothed)
-        self.duration = self.traj.duration
+        #self.duration = self.traj.duration
+        self.duration = 10
 
     def has_waypoints(self): return True
         
@@ -237,7 +249,7 @@ class Traj45(p_mt_dev.SpaceIndexedTraj):
         wps = wps or [[1.4,1.4,2], [0,0,2], [-1.4,-1.4,2], [-1,-3,2], [1,-3,2], [1.4,-1.4,2], [0,0,2], [-1.4,1.4,2], [-1,3,2], [1,3,2], [1.4,1.4,2]]
         self.wps = np.array(wps)
         self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps, bc="periodic")
-        self.duration = 10
+        self.duration = 30
         self.dyn_traj = p_t1d.AffOne((0,0),(self.duration,1))
         self.traj = p_mt_dev.SpaceIndexedTraj(self.wp_traj, self.dyn_traj)
         super().__init__(self.wp_traj, self.dyn_traj)
@@ -248,14 +260,14 @@ class Traj45(p_mt_dev.SpaceIndexedTraj):
 class Traj46(Traj45):
     name, desc = 'space indexed figure of height2', 'Space indexed waypoint trajectory example 2'
     def __init__(self):
-        wps = [[1.4,-1.4,2], [0,0,2], [-1.4,1.4,2], [-3,1,2], [-3,-1,2], [-1.4,-1.4,2], [0,0,2], [1.4,1.4,2], [3,1,2], [3,-1,2], [1.4,-1.4,2]]
+        wps = [[1.4,-1.4,1], [0,0,4], [-1.4,1.4,2], [-3,1,2], [-3,-1,2], [-1.4,-1.4,2], [0,0,4], [1.4,1.4,2], [3,1,2], [3,-1,2], [1.4,-1.4,1]]
         super().__init__(wps)
 
 class Traj47(Traj45):
     name, desc = 'space indexed figure of height3', 'Space indexed waypoint trajectory example 3'
     def __init__(self):
         z = 2.
-        wps = [[1.4,1.4,z], [0,0,z], [-1.4,-1.4,z], [-3,-1,z], [-3,1,z], [-1.4,1.4,z], [0,0,z], [1.4,-1.4,z], [3,-1,z], [3,1,z], [1.4,1.4,z]]
+        wps = [[1.4,1.4,4], [0,0,z], [-1.4,-1.4,z], [-3,-1,z], [-3,1,z], [-1.4,1.4,z], [0,0,z], [1.4,-1.4,z], [3,-1,z], [3,1,z], [1.4,1.4,4]]
         super().__init__(wps)
 
 class Traj48(Traj45):
@@ -291,8 +303,258 @@ class Traj50(Traj45):
         
         wps = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10]
         super().__init__(wps)
-        
-        
+
+#Let's try a queue leu leu showcase
+class QueueLeuLeu(p_mt_dev.SpaceIndexedTraj):
+    name, desc = 'queue leu leu', 'Space indexed waypoint example 7'
+    def __init__(self, wps=None, delay=0.0):
+        if wps is None:
+            wps = [[-2, 3, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3], 
+               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2], 
+               [0.5, 2.5, 1.5], [-2, 3, 1]]
+        self.wps = np.array(wps)
+        self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps, bc="periodic")
+        self.duration = 20.0
+        if delay > 0.0:
+            dyn_pts = [[0,0],[delay, 0], [delay + self.duration, 1.]]
+            dyn_segments = [p_t1d.AffOne(dyn_pts[i], dyn_pts[i+1]) for i in range(len(dyn_pts)-1)]
+            self.dyn_traj = p_t1d.SmoothedCompositeOne(dyn_segments, eps=0.01)
+        else: 
+            self.dyn_traj = p_t1d.AffOne((0,0),(self.duration,1))
+
+        super().__init__(self.wp_traj, self.dyn_traj)
+
+    def has_waypoints(self): return True
+    def get_waypoints(self): return self.wps
+
+class QueueLeuLeu1(QueueLeuLeu):
+    name, desc = 'queue leu leu 1', 'Course with delay1'
+    def __init__(self):
+        super().__init__(delay=0.0)
+
+class QueueLeuLeu2(QueueLeuLeu):
+    name, desc = 'queue leu leu 2', 'Course with delay2'
+    def __init__(self):
+        wps_2 = [[-2, 5, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3], 
+               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2], 
+               [0.5, 2.5, 1.5], [-2, 5, 1]]
+        super().__init__(wps=wps_2, delay=0.0)
+
+class QueueLeuLeu3(QueueLeuLeu):
+    name, desc = 'queue leu leu 3', 'Course with delay3'
+    def __init__(self):
+        super().__init__(delay=6.0)
+       
+
+# Dans traj_factory.py
+
+class CercleSafe1(p_mt.Circle):
+    name, desc = 'cercle safe 1', 'Rayon 1m'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [0, 0, 1.5], r=1., v=1., psit=p_t1d.CstOne(0))
+
+class CercleSafe2(p_mt.Circle):
+    name, desc = 'cercle safe 2', 'Rayon 3m'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [0, 0, 1.5], r=3., v=2., psit=p_t1d.CstOne(0))
+
+class CercleSafe3(p_mt.Circle):
+    name, desc = 'cercle safe 3', 'Rayon 5m'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [0, 0, 1.5], r=5., v=3., psit=p_t1d.CstOne(0))
+
+
+
+class SpiraleA(p_mt.Circle):
+    name, desc = 'spirale a', 'spirale 1/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+class SpiraleB(p_mt.Circle):
+    name, desc = 'spirale b', 'spirale 2/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+class SpiraleC(p_mt.Circle):
+    name, desc = 'spirale c', 'spirale 3/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+
+
+
+
+#
+# Show trajectories (collision-free by construction, smooth, indoor-safe)
+#
+
+# --- Rosette: 3 drones at 120deg on the same circle -> rotating triangle.
+#     Same omega -> stay exactly 120deg apart -> dist = r*sqrt(3) ~ 3.46m, always.
+class ShowRosetteA(p_mt.Circle):
+    name, desc = 'show rosette a', 'rosette 1/3: r=2 v=2.5, facing center, phase 0'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
+class ShowRosetteB(p_mt.Circle):
+    name, desc = 'show rosette b', 'rosette 2/3: r=2 v=2.5, facing center, phase 120'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
+class ShowRosetteC(p_mt.Circle):
+    name, desc = 'show rosette c', 'rosette 3/3: r=2 v=2.5, facing center, phase 240'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
+
+
+# --- Tornado: 3 concentric rings, distinct radii AND heights -> swirling tower.
+#     Min separation >= radial gap (1m) AND vertical gap (0.8m), independent of phase.
+class ShowTornadoInner(p_mt.Circle):
+    name, desc = 'show tornado inner', 'concentric ring r=1.5 z=1.8 v=2.0'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r=1.5, v=2.0, psit=p_t1d.CstOne(0))
+class ShowTornadoMid(p_mt.Circle):
+    name, desc = 'show tornado mid', 'concentric ring r=2.5 z=2.6 v=2.4'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,2.6], r=2.5, v=2.4, psit=p_t1d.CstOne(0))
+class ShowTornadoOuter(p_mt.Circle):
+    name, desc = 'show tornado outer', 'concentric ring r=3.5 z=3.4 v=3.0'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.4], r=3.5, v=3.0, psit=p_t1d.CstOne(0))
+
+
+# --- Counter-rotating twin rings: same circle, OPPOSITE direction (r sign),
+#     separated in height (1.4m) so the crossing points never collide.
+class ShowTwinLow(p_mt.Circle):
+    name, desc = 'show twin ring low', 'r=2 v=2.5 z=1.8 CCW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r= 2., v=2.5, psit=p_t1d.CstOne(0))
+class ShowTwinHigh(p_mt.Circle):
+    name, desc = 'show twin ring high', 'r=2 v=2.5 z=3.2 CW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.2], r=-2., v=2.5, psit=p_t1d.CstOne(0))
+
+
+# --- Pulsing ring: rosette + shared sine height -> 3 drones bob together while
+#     staying 120deg apart in xy -> safe (horizontal dist unchanged by common z).
+class ShowPulseA(p_mt.Circle):
+    name, desc = 'show pulse a', 'pulsing ring 1/3, sine height'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+class ShowPulseB(p_mt.Circle):
+    name, desc = 'show pulse b', 'pulsing ring 2/3, sine height'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+class ShowPulseC(p_mt.Circle):
+    name, desc = 'show pulse c', 'pulsing ring 3/3, sine height'
+    def __init__(self):
+        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+
+
+# --- Oval stack: two ovals at different heights (1.2m gap) and speeds.
+#     Constant vertical gap -> safe regardless of horizontal phase drift.
+class ShowOvalLow(p_mt.Oval):
+    name, desc = 'show oval low', 'oval l=2 r=1.5 v=2.0 z=1.8'
+    def __init__(self): super().__init__(l=2, r=1.5, v=2.0, z=1.8)
+class ShowOvalHigh(p_mt.Oval):
+    name, desc = 'show oval high', 'oval l=2 r=1.5 v=2.4 z=3.0'
+    def __init__(self): super().__init__(l=2, r=1.5, v=2.4, z=3.0)
+
+
+# --- Lissajous 3:2 (analytic, solo). Closed loop on [0, 2pi/om].
+#     All 5 derivative rows filled explicitly -> clean diff-flatness.
+class ShowLissajous(p_mt.Trajectory):
+    name, desc = 'show lissajous', 'analytic 3:2 lissajous, solo showpiece'
+    def __init__(self, A=2.5, B=2.5, a=3, b=2, om=0.35, z=2., delta=np.pi/2):
+        self.A, self.B, self.a, self.b, self.om = A, B, a, b, om
+        self.z, self.delta = z, delta
+        self.t0, self.duration = 0., 2*np.pi/om   # x does a*1, y does b*1 turns -> closes
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt = t - self.t0
+        wa, wb = self.a*self.om, self.b*self.om
+        pa, pb = wa*dt + self.delta, wb*dt
+        sa, ca = np.sin(pa), np.cos(pa)
+        sb, cb = np.sin(pb), np.cos(pb)
+        Yc = np.zeros((5,4))
+        Yc[0,p_mt._x], Yc[1,p_mt._x] =  self.A*sa,        self.A*wa*ca
+        Yc[2,p_mt._x], Yc[3,p_mt._x] = -self.A*wa**2*sa, -self.A*wa**3*ca
+        Yc[4,p_mt._x]                =  self.A*wa**4*sa
+        Yc[0,p_mt._y], Yc[1,p_mt._y] =  self.B*sb,        self.B*wb*cb
+        Yc[2,p_mt._y], Yc[3,p_mt._y] = -self.B*wb**2*sb, -self.B*wb**3*cb
+        Yc[4,p_mt._y]                =  self.B*wb**4*sb
+        Yc[0,p_mt._z] = self.z
+        return Yc.T
+
+
+# --- Space-indexed star (solo). 5-branch star, rounded by the periodic spline.
+#     Same family as Traj45 -> dynamics can be optimized later in your pipeline.
+class ShowStar(Traj45):
+    name, desc = 'show star', '5-branch star (rounded by spline), space indexed'
+    def __init__(self):
+        R, r, z = 2.5, 1.0, 2.
+        wps = [[ (R if k%2==0 else r)*np.cos(np.pi/2 + k*np.pi/5),
+                 (R if k%2==0 else r)*np.sin(np.pi/2 + k*np.pi/5), z ] for k in range(10)]
+        wps.append(wps[0])  # close the loop (periodic bc, like Traj45)
+        super().__init__(wps)
+
+
+
+class ConflitTriA(p_mt.SmoothBackAndForth):
+    name, desc = 'conflit tri a', 'coin->centre->coin, 0 deg'
+    def __init__(self): super().__init__(Y0=[ 3.0, 0.0,2.5,0], Y1=[0,0,2.5,0], dt_move=4.)
+class ConflitTriB(p_mt.SmoothBackAndForth):
+    name, desc = 'conflit tri b', 'coin->centre->coin, 120 deg'
+    def __init__(self): super().__init__(Y0=[-1.5, 2.6,2.5,0], Y1=[0,0,2.5,0], dt_move=4.)
+class ConflitTriC(p_mt.SmoothBackAndForth):
+    name, desc = 'conflit tri c', 'coin->centre->coin, 240 deg'
+    def __init__(self): super().__init__(Y0=[-1.5,-2.6,2.5,0], Y1=[0,0,2.5,0], dt_move=4.)
+
+
+
+class ScaraRace(p_mt.CompositeTraj):
+    name, desc = 'scara race', 'type SCARA : dashs horizontaux rapides + arrets nets adoucis'
+    def __init__(self):
+        z, psi = 2.5, 0.
+        t_move, t_dwell = 2.2, 0.4   # >>> les 2 seuls reglages : vitesse du dash / duree de l'arret
+        # coins d'un rectangle dans le plan z=2.5 (workspace type SCARA), boucle fermee
+        coins = [[-2,-2,z,psi], [2,-2,z,psi], [2,2,z,psi], [-2,2,z,psi]]
+        coins.append(coins[0])                 # referme la boucle -> repetition propre
+        steps = []
+        for i in range(len(coins)-1):
+            steps.append(p_mt.SmoothLine(coins[i], coins[i+1], duration=t_move))  # dash, repos->repos
+            steps.append(p_mt.Cst(coins[i+1], duration=t_dwell))                  # arret (dwell)
+        super().__init__(steps)
+
+
+class SpiraleMontanteA(p_mt.Circle):
+    name, desc = 'spirale montante a', 'helice 1/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
+    def __init__(self):
+        r, v, a0, N = 2., 2., 0., 2;          om = v/r;  om_z = om/(2*N)
+        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+class SpiraleMontanteB(p_mt.Circle):
+    name, desc = 'spirale montante b', 'helice 2/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
+    def __init__(self):
+        r, v, a0, N = 2., 2., 2*np.pi/3, 2;   om = v/r;  om_z = om/(2*N)
+        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+class SpiraleMontanteC(p_mt.Circle):
+    name, desc = 'spirale montante c', 'helice 3/3 : r=2 v=2, 120 deg, monte en 2 tours, z 1.5->6.5m'
+    def __init__(self):
+        r, v, a0, N = 2., 2., 4*np.pi/3, 2;   om = v/r;  om_z = om/(2*N)
+        p_mt.Circle.__init__(self, [0,0,4.], r=r, v=v, alpha0=a0,
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+
+
+
+
+
+
 class TrajFactory:
     _chapters = {}
     _trajectories = {}
@@ -342,3 +604,49 @@ TrajFactory.register(Traj47, 'space index')
 TrajFactory.register(Traj48, 'space index')
 TrajFactory.register(Traj49, 'space index')
 TrajFactory.register(Traj50, 'space index')
+
+
+TrajFactory.register(cercle_back_and_forth, 'showcase 1')
+
+TrajFactory.register(QueueLeuLeu1, 'Poursuite')
+TrajFactory.register(QueueLeuLeu2, 'Poursuite')
+TrajFactory.register(QueueLeuLeu3, 'Poursuite')
+
+TrajFactory.register(CercleSafe1, 'safe_test')
+TrajFactory.register(CercleSafe2, 'safe_test')
+TrajFactory.register(CercleSafe3, 'safe_test')
+
+TrajFactory.register(ShowRosetteA, 'show')
+TrajFactory.register(ShowRosetteB, 'show')
+TrajFactory.register(ShowRosetteC, 'show')
+
+TrajFactory.register(ShowTornadoInner, 'show')
+TrajFactory.register(ShowTornadoMid, 'show')
+TrajFactory.register(ShowTornadoOuter, 'show')
+
+TrajFactory.register(ShowTwinLow, 'show')
+TrajFactory.register(ShowTwinHigh, 'show')
+
+TrajFactory.register(ShowPulseA, 'show')
+TrajFactory.register(ShowPulseB, 'show')
+TrajFactory.register(ShowPulseC, 'show')
+
+TrajFactory.register(ShowOvalLow, 'show')
+TrajFactory.register(ShowOvalHigh, 'show')
+
+TrajFactory.register(ShowLissajous, 'show')
+TrajFactory.register(ShowStar, 'show')
+
+TrajFactory.register(SpiraleA, 'show')
+TrajFactory.register(SpiraleB, 'show')
+TrajFactory.register(SpiraleC, 'show')
+
+TrajFactory.register(ScaraRace, 'show')
+
+TrajFactory.register(SpiraleMontanteA, 'show')
+TrajFactory.register(SpiraleMontanteB, 'show')
+TrajFactory.register(SpiraleMontanteC, 'show')
+
+TrajFactory.register(ConflitTriA, 'Conflicts')
+TrajFactory.register(ConflitTriB, 'Conflicts')
+TrajFactory.register(ConflitTriC, 'Conflicts')
