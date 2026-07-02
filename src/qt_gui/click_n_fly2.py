@@ -244,7 +244,6 @@ class Application(QApplication):
         self.fd.status = FDStatus.STAGING
         self.is_guiding = True
         self.operator_view.button_guide.setEnabled(False)
-        self.operator_view.button_restart.setEnabled(False)
         self.operator_view.button_stop.setEnabled(True)
 
     def on_stop_clicked(self):
@@ -254,18 +253,7 @@ class Application(QApplication):
         for ac_id in self.fd.ids:
             self.fd.acs[ac_id].release()
         self.operator_view.button_guide.setEnabled(True)
-        self.operator_view.button_restart.setEnabled(True)
         self.operator_view.button_stop.setEnabled(False)
-
-    def on_restart_clicked(self):
-        self.operator_view.log_text('Restarting: Drones go back to starting point')
-        for ac_id in self.fd.ids:
-            self.fd.acs[ac_id].take_control()
-        self.fd.status = FDStatus.STAGING
-        self.is_guiding = True
-        self.operator_view.button_restart.setEnabled(False)
-        self.operator_view.button_guide.setEnabled(False)
-        self.operator_view.button_stop.setEnabled(True)
 
     def on_change_scenario_clicked(self):
         preselect = 0

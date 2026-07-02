@@ -237,10 +237,6 @@ class OperatorWindow(QMainWindow):
         self.button_guide.setEnabled(False)
         self.button_guide.clicked.connect(self.app.on_guide_clicked)
 
-        self.button_restart = QPushButton("Restart Show")
-        self.button_restart.setEnabled(False)
-        self.button_restart.clicked.connect(self.app.on_restart_clicked)
-
         self.button_stop = QPushButton("Stop Show")
         self.button_stop.setObjectName("warning")
         self.button_stop.setEnabled(False)
@@ -251,7 +247,6 @@ class OperatorWindow(QMainWindow):
 
 
         v.addWidget(self.button_guide)
-        v.addWidget(self.button_restart)
         v.addWidget(self.button_stop)
         v.addWidget(self.progress)
         return group
@@ -337,7 +332,6 @@ class OperatorWindow(QMainWindow):
 
     def _reset_controls(self):
         self.button_guide.setEnabled(False)
-        self.button_restart.setEnabled(False)
         self.button_stop.setEnabled(False)
         self.progress.setValue(0)
         self._set_safety_state("Unverified", "warn")
