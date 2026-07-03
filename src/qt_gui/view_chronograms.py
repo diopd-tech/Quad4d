@@ -161,7 +161,7 @@ class FullStateChronogram(FigureCanvas):
     def __init__(self):
         super().__init__(Figure(figsize=(12, 10), layout='tight'))
         self.axes = self.figure.subplots(4,3, sharex=True)
-        self.lines = [[], []]
+        self.lines = {}   # keyed by trajectory idx -> supports any drone count
         for ax, t in zip(self.axes[0], ['$x$', '$y$', '$z$']):
             mu.decorate(ax, title=t, ylab='m', legend=True, grid=True)
         for ax, t in zip(self.axes[1], ['$\\dot{x}$', '$\\dot{y}$', '$\\dot{z}$']):

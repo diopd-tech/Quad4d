@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
 import view_three_d as vtd
+import view_chronograms as view_chrono
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,19 @@ class OperatorWindow(QMainWindow):
         change_scen_action = scen_menu.addAction("Change scenario...")
         change_scen_action.triggered.connect(self.app.on_change_scenario_clicked)
 
+        # Chronograms: reuse the editor's plot widgets. They show the planned
+        # trajectory profile (position/velocity/attitude over time), computed
+        # from the model, in separate windows toggled from the View menu.
+        self._chrono_windows = {}
+        self._chrono_specs = {
+            'full_state_chrono': (view_chrono.FullStateChronogram, 'Full state chronogram'),
+        }
+        view_menu = self.menuBar().addMenu("View")
+        for key, (_cls, title) in self._chrono_specs.items():
+            act = view_menu.addAction(title)
+            act.setCheckable(True)
+            act.toggled.connect(lambda checked, k=key: self._toggle_chronogram(k, checked))
+
         root = QWidget()
         root.setObjectName("root")
         self.setCentralWidget(root)
@@ -159,7 +173,36 @@ class OperatorWindow(QMainWindow):
         self.setStyleSheet(STYLE)
         self._set_safety_state("Unverified", "warn")
 
+    def _open_chronogram(self, key):
+        cls, title = self._chrono_specs[key]
+        win = view_chrono.ChronogramWindow(cls, title)
+        for i in range(self.model.trajectory_nb()):
+            win.display_new_trajectory(self.model, idx=i)
+        self._chrono_windows[key] = win
+        win.show()
+        win.raise_()
+
+    def _toggle_chronogram(self, key, checked):
+        # always tear down and rebuild fresh: the chronogram widgets add new
+        # plot lines on each display_new_trajectory, so reusing a window would
+        # accumulate stale lines across scenario changes
+        existing = self._chrono_windows.pop(key, None)
+        if existing is not None:
+            existing.close()
+        if checked:
+            self._open_chronogram(key)
+
+    def _refresh_chronograms(self):
+        for key in list(self._chrono_windows.keys()):
+            win = self._chrono_windows.pop(key)
+            visible = win.isVisible()
+            win.close()
+            if visible:
+                self._open_chronogram(key)
+
     def closeEvent(self, event):
+        for win in self._chrono_windows.values():
+            win.close()
         self.app.on_quit()
         event.accept()
 
@@ -319,6 +362,7 @@ class OperatorWindow(QMainWindow):
         self._replace_drones_panel(fd.ids, colors, trajs)
 
         self._update_scenario_labels(scenario)
+        self._refresh_chronograms()
         self._reset_controls()
 
     def _replace_drones_panel(self, ids, colors, trajs):
