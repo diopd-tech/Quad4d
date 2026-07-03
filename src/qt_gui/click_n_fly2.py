@@ -68,23 +68,41 @@ class Drone:
         # maybe? https://github.com/eric-wieser/numpy_ringbuffer/blob/master/numpy_ringbuffer/__init__.py
         self.status = DroneStatus.UNKNOWN
         self.battery_v = None
+        self.link_down = False   # True once an Ivy send has failed (bus gone)
 
     def connect(self, conf, ivy):
         self.conf = conf
         self.settings = PprzSettingsManager(conf.settings, conf.id, ivy)
         self.guided = GuidedMode(ivy)
         self.status = DroneStatus.CONNECTED
-        
+
+    def _send(self, action):
+        """Run an Ivy-sending command; if the bus is gone, degrade
+        gracefully (log once) instead of spamming tracebacks. Returns
+        True on success, False if the Ivy link is down."""
+        try:
+            action()
+        except RuntimeError as e:
+            if not self.link_down:
+                _id = getattr(self.conf, 'id', '?')
+                logger.warning(f'aircraft {_id}: Ivy link down, command dropped ({e})')
+            self.link_down = True
+            return False
+        self.link_down = False
+        return True
+
     def take_control(self):
         if self.status == DroneStatus.UNKNOWN:
-            return
-        self.settings['auto2'] = 'Guided'
-        self.guided.move_at_ned_vel(self.conf.id) # set zero speed
+            return True
+        def _do():
+            self.settings['auto2'] = 'Guided'
+            self.guided.move_at_ned_vel(self.conf.id) # set zero speed
+        return self._send(_do)
 
     def release(self):
-        if self.status == DroneStatus.UNKNOWN:   
-            return
-        self.settings['auto2'] = 'Nav'
+        if self.status == DroneStatus.UNKNOWN:
+            return True
+        return self._send(lambda: self.settings.__setitem__('auto2', 'Nav'))
 
     def set_pose(self, T):
         self.T=T
@@ -95,15 +113,14 @@ class Drone:
         
     def set_ref(self, Tref, Yref): self.Tref, self.Yref = Tref, Yref
     def goto_ref(self):
-        self.guided.goto_enu(self.conf.id, *self.Yref[:,0])
+        return self._send(lambda: self.guided.goto_enu(self.conf.id, *self.Yref[:,0]))
     def follow_ref(self):
         Y = mu.Yenu2ned(self.Yref)
-        #self.guided.set_full_ned(self.conf.id, *Y[:3,0], *Y[:3,1], *Y[:3,2], Y[3,0])
-        self.guided.set_full_ned(self.conf.id,
+        return self._send(lambda: self.guided.set_full_ned(self.conf.id,
                                  Y[0,0], Y[1,0], Y[2,0],
                                  Y[0,1], Y[1,1], Y[2,1],
                                  Y[0,2], Y[1,2], Y[2,2],
-                                 Y[3,0])
+                                 Y[3,0]))
         
     def dist_to_ref(self):
         return np.linalg.norm(mu.pos_of_T(self.T)-mu.pos_of_T(self.Tref))
@@ -120,6 +137,12 @@ class FlightDirector:
         self.ids, self.acs = ids, {}
         for _id in self.ids:
             self.acs[_id] = Drone()
+        # Persistent pool: keep a strong reference to every Drone ever created,
+        # even ids not in the current scenario. Dropping a Drone would let
+        # Python garbage-collect its Ivy-bound settings/guided objects, which
+        # tears down the shared Ivy bus ("Ivy server not running!") after a
+        # scenario switch that removes a drone.
+        self.drone_pool = dict(self.acs)
         self.known_confs = {}  # every conf ever seen, even for ids not currently in acs
         self.t0 = 0.
         self.duree_du_show = self.trajectories.trajectory_duration()  #POur avoir la durée du show
@@ -194,8 +217,10 @@ class FlightDirector:
 
     def get_acs(self): return self.acs
     def quit(self):
-        for _id in self.acs:
-            self.acs[_id].release()
+        # release every drone ever pooled, not just the active scenario's,
+        # so none is left armed in Guided from an earlier scenario
+        for drone in self.drone_pool.values():
+            drone.release()
         time.sleep(0.2) # wait for message to be transmitted before closing middleware, yeah.. fuck, we need synchro with ivy
         self.pprz_connect.shutdown()
 
@@ -251,8 +276,10 @@ class Application(QApplication):
         # re-arm Guided mode: a no-op for drones connecting for the first
         # time (already armed in on_pprz_connect), but required for drones
         # released to NAV by a previous Stop (e.g. before a scenario switch)
-        for ac_id in self.fd.ids:
-            self.fd.acs[ac_id].take_control()
+        results = [self.fd.acs[ac_id].take_control() for ac_id in self.fd.ids]
+        if not all(results):
+            self.operator_view.log_text(
+                'WARNING: Ivy bus unavailable - is Paparazzi (server/simulator) running?')
         self.fd.status = FDStatus.STAGING
         self.is_guiding = True
         self.operator_view.button_guide.setEnabled(False)
@@ -291,22 +318,21 @@ class Application(QApplication):
         for traj_name in trajs:
             new_model.load_from_factory(traj_name)
 
-        # reuse Drone objects (and their live Ivy/settings connection) for
-        # ids already known to the flight director; ids new to this
-        # scenario but already seen on the Ivy bus get adopted immediately
-        # (their original on_pprz_connect notification was lost since they
-        # weren't tracked yet); truly new ids start out unconnected.
-        old_acs = self.fd.acs
+        # Reuse Drone objects from the persistent pool (never dropped, so their
+        # Ivy connection stays alive). A drone new to this run but already seen
+        # on the Ivy bus is adopted immediately (its original on_pprz_connect
+        # notification was lost since it wasn't tracked yet); a truly new id
+        # starts out unconnected.
         new_acs = {}
         for _id in ids:
-            if _id in old_acs:
-                new_acs[_id] = old_acs[_id]
-                continue
-            drone = Drone()
-            conf = self.fd.known_confs.get(_id)
-            if conf is not None:
-                drone.connect(conf, self.fd.pprz_connect.ivy)
-                drone.take_control()
+            drone = self.fd.drone_pool.get(_id)
+            if drone is None:
+                drone = Drone()
+                self.fd.drone_pool[_id] = drone
+                conf = self.fd.known_confs.get(_id)
+                if conf is not None:
+                    drone.connect(conf, self.fd.pprz_connect.ivy)
+                    drone.take_control()
             new_acs[_id] = drone
         self.fd.acs = new_acs
         self.fd.ids = ids
