@@ -7,23 +7,23 @@ import pat3.vehicles.rotorcraft.multirotor_trajectory as p_mt
 import pat3.vehicles.rotorcraft.multirotor_trajectory_dev as p_mt_dev
 
 class Traj1(p_mt.Circle):
-    name, desc = 'circle north', 'circle r=2 v=4, constant heading and height'
-    def __init__(self): p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=4., psit=p_t1d.CstOne(0))
+    name, desc = 'circle north', 'circle r=2 v=2, constant heading and height'
+    def __init__(self): p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=2., psit=p_t1d.CstOne(0))
 
 class Traj2(p_mt.Circle):
-    name, desc = 'circle center', 'circle r=2 v=4, facing center, constant height'
+    name, desc = 'circle center', 'circle r=2 v=2, facing center, constant height'
     def __init__(self):
-        r, v, alpha0 = 2., 4., 0; om = v/r; psit = p_t1d.AffineOne(om, alpha0+np.sign(r)*np.pi)
+        r, v, alpha0 = 2., 2., 0; om = v/r; psit = p_t1d.AffineOne(om, alpha0+np.sign(r)*np.pi)
         p_mt.Circle.__init__(self, [0, 0, 1.5], r=r, v=v, alpha0=alpha0, psit=psit)
 
 class Traj3(p_mt.Circle):
-    name, desc = 'circle front', 'circle r=2 v=4, facing forward, constant height'
+    name, desc = 'circle front', 'circle r=2 v=2, facing forward, constant height'
     def __init__(self):
-        r, v, alpha0 = -2., 4., 0; om = v/r; psit = p_t1d.AffineOne(om, alpha0+np.sign(r)*np.pi/2)
+        r, v, alpha0 = -2., 2., 0; om = v/r; psit = p_t1d.AffineOne(om, alpha0+np.sign(r)*np.pi/2)
         p_mt.Circle.__init__(self, [0, 0, 1.5], r=r, v=v, alpha0=alpha0, psit=psit)
-    
+
 class Traj4(p_mt.Circle):
-    name, desc = 'circle zsine', 'circle r=2 v=4, constant heading, sine height'
+    name, desc = 'circle zsine', 'circle r=2 v=2, constant heading, sine height'
     def __init__(self): p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=2., psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=2, a=0.5, om=4))
 
 class Traj5(p_mt.SmoothBackAndForth):
@@ -36,7 +36,7 @@ class Traj6(p_mt.CircleWithIntro):
     def __init__(self):
         super().__init__(Y0=[0, 0, 1.5, 0], c=[0, 0, 2.5],
                          #r=2., v=1., dt_intro=5., dt_stay=0.5, psit=p_t1d.CstOne(0.))
-                         r=2., v=3., dt_intro=5., dt_stay=0.5, psit=p_t1d.CstOne(0.))
+                         r=2., v=2., dt_intro=5., dt_stay=0.5, psit=p_t1d.CstOne(0.))
 
 class Traj61(p_mt.CircleWithIntro):
     name, desc = 'circle_with_intro1', 'circle with intro'
@@ -374,21 +374,21 @@ class CercleSafe3(p_mt.Circle):
 
 
 class SpiraleA(p_mt.Circle):
-    name, desc = 'spirale a', 'spirale 1/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    name, desc = 'spirale a', 'spirale 1/3 : r=2 v=2, 120 deg, z sinus 2->4m'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        r, v, a0 = 2., 2., 0.;           om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
 class SpiraleB(p_mt.Circle):
-    name, desc = 'spirale b', 'spirale 2/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    name, desc = 'spirale b', 'spirale 2/3 : r=2 v=2, 120 deg, z sinus 2->4m'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 2*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
 class SpiraleC(p_mt.Circle):
-    name, desc = 'spirale c', 'spirale 3/3 : r=2 v=2.5, 120 deg, z sinus 2->4m'
+    name, desc = 'spirale c', 'spirale 3/3 : r=2 v=2, 120 deg, z sinus 2->4m'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 4*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
 
@@ -402,19 +402,19 @@ class SpiraleC(p_mt.Circle):
 # --- Rosette: 3 drones at 120deg on the same circle -> rotating triangle.
 #     Same omega -> stay exactly 120deg apart -> dist = r*sqrt(3) ~ 3.46m, always.
 class ShowRosetteA(p_mt.Circle):
-    name, desc = 'show rosette a', 'rosette 1/3: r=2 v=2.5, facing center, phase 0'
+    name, desc = 'show rosette a', 'rosette 1/3: r=2 v=2, facing center, phase 0'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        r, v, a0 = 2., 2., 0.;           om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
 class ShowRosetteB(p_mt.Circle):
-    name, desc = 'show rosette b', 'rosette 2/3: r=2 v=2.5, facing center, phase 120'
+    name, desc = 'show rosette b', 'rosette 2/3: r=2 v=2, facing center, phase 120'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 2*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
 class ShowRosetteC(p_mt.Circle):
-    name, desc = 'show rosette c', 'rosette 3/3: r=2 v=2.5, facing center, phase 240'
+    name, desc = 'show rosette c', 'rosette 3/3: r=2 v=2, facing center, phase 240'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 4*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0, psit=p_t1d.AffineOne(om, a0+np.pi))
 
 
@@ -434,11 +434,11 @@ class ShowTornadoOuter(p_mt.Circle):
 # --- Counter-rotating twin rings: same circle, OPPOSITE direction (r sign),
 #     separated in height (1.4m) so the crossing points never collide.
 class ShowTwinLow(p_mt.Circle):
-    name, desc = 'show twin ring low', 'r=2 v=2.5 z=1.8 CCW'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r= 2., v=2.5, psit=p_t1d.CstOne(0))
+    name, desc = 'show twin ring low', 'r=2 v=2 z=1.8 CCW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r= 2., v=2., psit=p_t1d.CstOne(0))
 class ShowTwinHigh(p_mt.Circle):
-    name, desc = 'show twin ring high', 'r=2 v=2.5 z=3.2 CW'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.2], r=-2., v=2.5, psit=p_t1d.CstOne(0))
+    name, desc = 'show twin ring high', 'r=2 v=2 z=3.2 CW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.2], r=-2., v=2., psit=p_t1d.CstOne(0))
 
 
 # --- Pulsing ring: rosette + shared sine height -> 3 drones bob together while
@@ -446,19 +446,19 @@ class ShowTwinHigh(p_mt.Circle):
 class ShowPulseA(p_mt.Circle):
     name, desc = 'show pulse a', 'pulsing ring 1/3, sine height'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 0.;          om = v/r
+        r, v, a0 = 2., 2., 0.;           om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
 class ShowPulseB(p_mt.Circle):
     name, desc = 'show pulse b', 'pulsing ring 2/3, sine height'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 2*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 2*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
 class ShowPulseC(p_mt.Circle):
     name, desc = 'show pulse c', 'pulsing ring 3/3, sine height'
     def __init__(self):
-        r, v, a0 = 2., 2.5, 4*np.pi/3;   om = v/r
+        r, v, a0 = 2., 2., 4*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
                              psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
 
@@ -469,8 +469,8 @@ class ShowOvalLow(p_mt.Oval):
     name, desc = 'show oval low', 'oval l=1.5 r=1.5 v=2.0 z=1.8'
     def __init__(self): super().__init__(l=1.5, r=1.5, v=2.0, z=1.8)
 class ShowOvalHigh(p_mt.Oval):
-    name, desc = 'show oval high', 'oval l=1.5 r=1.5 v=2.4 z=3.0'
-    def __init__(self): super().__init__(l=1.5, r=1.5, v=2.4, z=3.0)
+    name, desc = 'show oval high', 'oval l=1.5 r=1.5 v=2.0 z=3.0'
+    def __init__(self): super().__init__(l=1.5, r=1.5, v=2.0, z=3.0)
 
 
 # --- Lissajous 3:2 (analytic, solo). Closed loop on [0, 2pi/om].
