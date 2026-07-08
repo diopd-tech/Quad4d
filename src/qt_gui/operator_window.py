@@ -117,7 +117,9 @@ class OperatorWindow(QMainWindow):
         # from the model, in separate windows toggled from the View menu.
         self._chrono_windows = {}
         self._chrono_specs = {
+            'state_chrono': (view_chrono.StateChronogram, 'State chronogram'),
             'full_state_chrono': (view_chrono.FullStateChronogram, 'Full state chronogram'),
+            'output_chrono': (view_chrono.OutputChronogram, 'Output chronogram'),
         }
         view_menu = self.menuBar().addMenu("View")
         for key, (_cls, title) in self._chrono_specs.items():
