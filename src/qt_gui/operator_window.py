@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
 from drones_panel import DronesPanel
 import view_three_d as vtd
 import view_chronograms as view_chrono
+from live_telemetry import TelemetryRecorder, LiveTelemetryWindow
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,14 @@ class OperatorWindow(QMainWindow):
             act.setCheckable(True)
             act.toggled.connect(lambda checked, k=key: self._toggle_chronogram(k, checked))
 
+        # live telemetry: recorder runs from startup (fed by periodic()),
+        # the window is opened on demand with the history already there
+        self.telemetry_recorder = TelemetryRecorder(self.fd.ids)
+        self._live_telemetry_win = None
+        view_menu.addSeparator()
+        live_act = view_menu.addAction("Live telemetry")
+        live_act.triggered.connect(self._show_live_telemetry)
+
         root = QWidget()
         root.setObjectName("root")
         self.setCentralWidget(root)
@@ -202,9 +211,20 @@ class OperatorWindow(QMainWindow):
             if visible:
                 self._open_chronogram(key)
 
+    def _show_live_telemetry(self):
+        if self._live_telemetry_win is None:
+            self._live_telemetry_win = LiveTelemetryWindow(self.telemetry_recorder)
+        self._live_telemetry_win.show()
+        self._live_telemetry_win.raise_()
+
+    def record_live_telemetry(self, fd):
+        self.telemetry_recorder.record(fd)
+
     def closeEvent(self, event):
         for win in self._chrono_windows.values():
             win.close()
+        if self._live_telemetry_win is not None:
+            self._live_telemetry_win.close()
         self.app.on_quit()
         event.accept()
 
@@ -365,6 +385,7 @@ class OperatorWindow(QMainWindow):
 
         self._update_scenario_labels(scenario)
         self._refresh_chronograms()
+        self.telemetry_recorder.reset(fd.ids)
         self._reset_controls()
 
     def _replace_drones_panel(self, ids, colors, trajs):

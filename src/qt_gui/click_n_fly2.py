@@ -363,6 +363,9 @@ class Application(QApplication):
             if self.is_guiding:
                 self.fd.run()
                 self.operator_view.drones_panel.update_from_fd(self.fd)
+            # always record (not only while guiding): staging and manual
+            # moves are interesting to see in the live telemetry too
+            self.operator_view.record_live_telemetry(self.fd)
             self.t0 += self.dt_control
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
