@@ -340,6 +340,11 @@ class Application(QApplication):
                     drone.connect(conf, self.fd.pprz_connect.ivy)
                     drone.take_control()
             new_acs[_id] = drone
+        # drones survive scenario switches (persistent pool), so their flown
+        # trace must be cleared explicitly or the old show's trail lingers
+        # in the freshly rebuilt 3D views
+        for drone in new_acs.values():
+            drone.vehicle_traj = []
         self.fd.acs = new_acs
         self.fd.ids = ids
         self.fd.trajectories = new_model
