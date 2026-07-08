@@ -182,17 +182,18 @@ class Traj42(p_mt_dev.SpaceIndexedTraj):
     name, desc = 'space indexed race track 1', 'Space indexed waypoint trajectory example 1'
     def __init__(self, wps=None, dyn_pts=None):
         wps = wps if wps is not None else [[0.2,0, 1],[2.,3., 2], [2.,-3., 3], [-2.,-3., 4], [-2.,3., 3], [-0.2, 0., 2]]
-        dyn_pts = dyn_pts if dyn_pts is not None else [[0,0],[1., 0], [4.5,0.1], [7.5,0.7], [10.,0.9], [14., 1.], [15,1.]]
-        #dyn_pts = [[0,0],[1., 0], [3.,0.1], [5.,0.7], [7.,0.9], [9., 1.], [10,1.]]
+        # time axis stretched x2 (cruise was ~4.7 m/s, too fast to track)
+        dyn_pts = dyn_pts if dyn_pts is not None else [[0,0],[2., 0], [9.,0.1], [15.,0.7], [20.,0.9], [28., 1.], [30,1.]]
         self.wps = np.array(wps)
         self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps)
         self.dyn_ctl_pts = np.array(dyn_pts)
         self.dyn_segments = [p_t1d.AffOne(self.dyn_ctl_pts[i], self.dyn_ctl_pts[i+1]) for i in range(len(self.dyn_ctl_pts)-1)]
         self.dyn_traj = p_t1d.SmoothedCompositeOne(self.dyn_segments, eps=0.75)
         self.traj = p_mt_dev.SpaceIndexedTraj(self.wp_traj, self.dyn_traj)
-        #super().__init__(self.wp_traj, self.dyn_smoothed)
-        #self.duration = self.traj.duration
-        self.duration = 10
+        # duration must match the end of the dyn law: it used to be hardcoded
+        # to 10 while the law ran to 15, so the looping show cut at ~90% of
+        # the path and jumped back to the start
+        self.duration = dyn_pts[-1][0]
 
     def has_waypoints(self): return True
         
@@ -239,7 +240,8 @@ class Traj44(Traj42):
                         [0,  1, 1.5],
                         [2,  2, 2.5],
                         [0,  3, 1.5]])
-        dyn_pts = [[0,0],[1., 0], [2.,0.1], [3.,0.2], [5.,0.7], [7.,0.8], [9., 1.], [10,1.]]
+        # time axis stretched x2 (was ~4 m/s through the tight slalom turns)
+        dyn_pts = [[0,0],[2., 0], [4.,0.1], [6.,0.2], [10.,0.7], [14.,0.8], [18., 1.], [20,1.]]
         super().__init__(wps, dyn_pts)
 
 
@@ -378,19 +380,19 @@ class SpiraleA(p_mt.Circle):
     def __init__(self):
         r, v, a0 = 2., 2., 0.;           om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=om))  # om_z was 2*om: 4 m/s2 vertical, drones can't track it
 class SpiraleB(p_mt.Circle):
     name, desc = 'spirale b', 'spirale 2/3 : r=2 v=2, 120 deg, z sinus 2->4m'
     def __init__(self):
         r, v, a0 = 2., 2., 2*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=om))  # om_z was 2*om: 4 m/s2 vertical, drones can't track it
 class SpiraleC(p_mt.Circle):
     name, desc = 'spirale c', 'spirale 3/3 : r=2 v=2, 120 deg, z sinus 2->4m'
     def __init__(self):
         r, v, a0 = 2., 2., 4*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,3.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=2*om))
+                             psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=3., a=1., om=om))  # om_z was 2*om: 4 m/s2 vertical, drones can't track it
 
 
 
@@ -421,14 +423,14 @@ class ShowRosetteC(p_mt.Circle):
 # --- Tornado: 3 concentric rings, distinct radii AND heights -> swirling tower.
 #     Min separation >= radial gap (1m) AND vertical gap (0.8m), independent of phase.
 class ShowTornadoInner(p_mt.Circle):
-    name, desc = 'show tornado inner', 'concentric ring r=1.5 z=1.8 v=2.0'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r=1.5, v=2.0, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado inner', 'concentric ring r=1.5 z=1.8 v=1.7'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r=1.5, v=1.7, psit=p_t1d.CstOne(0))
 class ShowTornadoMid(p_mt.Circle):
-    name, desc = 'show tornado mid', 'concentric ring r=2.5 z=2.6 v=2.4'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,2.6], r=2.5, v=2.4, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado mid', 'concentric ring r=2.5 z=2.6 v=2.0'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,2.6], r=2.5, v=2.0, psit=p_t1d.CstOne(0))
 class ShowTornadoOuter(p_mt.Circle):
-    name, desc = 'show tornado outer', 'concentric ring r=3.5 z=3.4 v=3.0'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.4], r=3.5, v=3.0, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado outer', 'concentric ring r=3.5 z=3.4 v=2.5'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.4], r=3.5, v=2.5, psit=p_t1d.CstOne(0))
 
 
 # --- Counter-rotating twin rings: same circle, OPPOSITE direction (r sign),
@@ -448,19 +450,19 @@ class ShowPulseA(p_mt.Circle):
     def __init__(self):
         r, v, a0 = 2., 2., 0.;           om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.0))  # z bob softened 1.5->1.0
 class ShowPulseB(p_mt.Circle):
     name, desc = 'show pulse b', 'pulsing ring 2/3, sine height'
     def __init__(self):
         r, v, a0 = 2., 2., 2*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.0))  # z bob softened 1.5->1.0
 class ShowPulseC(p_mt.Circle):
     name, desc = 'show pulse c', 'pulsing ring 3/3, sine height'
     def __init__(self):
         r, v, a0 = 2., 2., 4*np.pi/3;    om = v/r
         p_mt.Circle.__init__(self, [0,0,2.], r=r, v=v, alpha0=a0,
-                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.5))
+                             psit=p_t1d.AffineOne(om, a0+np.pi), zt=p_t1d.SinOne(c=2., a=0.5, om=1.0))  # z bob softened 1.5->1.0
 
 
 # --- Oval stack: two ovals at different heights (1.2m gap) and speeds.
@@ -477,7 +479,7 @@ class ShowOvalHigh(p_mt.Oval):
 #     All 5 derivative rows filled explicitly -> clean diff-flatness.
 class ShowLissajous(p_mt.Trajectory):
     name, desc = 'show lissajous', 'analytic 3:2 lissajous, solo showpiece'
-    def __init__(self, A=2.5, B=2.5, a=3, b=2, om=0.35, z=2., delta=np.pi/2):
+    def __init__(self, A=2.5, B=2.5, a=3, b=2, om=0.28, z=2., delta=np.pi/2):  # om 0.35->0.28: amax ~2.8 -> ~1.8 m/s2
         self.A, self.B, self.a, self.b, self.om = A, B, a, b, om
         self.z, self.delta = z, delta
         self.t0, self.duration = 0., 2*np.pi/om   # x does a*1, y does b*1 turns -> closes
@@ -544,7 +546,7 @@ class ClosedLoop(p_mt.CompositeTraj):
     Appends a smooth min-snap segment from the end state back to the
     start state; SmoothLine matches the full flat output (position AND
     derivatives) at both ends, so the join is velocity/accel-continuous."""
-    def __init__(self, traj, return_duration=4.):
+    def __init__(self, traj, return_duration=8.):  # 4s dove ~5m down at ~2.3 m/s, through own downwash (vortex ring risk)
         Y_end   = traj.get(traj.duration)
         Y_start = traj.get(0.)
         return_seg = p_mt.SmoothLine(Y_end, Y_start, duration=return_duration)
