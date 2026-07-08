@@ -23,6 +23,12 @@ from scenario_picker import ScenarioPickerDialog
 
 logger = logging.getLogger(__name__)
 
+# Show starts once every drone is within this distance (m) of its start
+# point. Larger = starts reliably but with a visible correction jump at
+# launch; smaller = cleaner start but hover jitter may prevent it from
+# ever triggering. History: v1 used 0.1, v3 uses 0.15.
+DIST_TO_START_THRESHOLD = 0.3
+
 
 class MainWindow(QMainWindow):
     def __init__(self, model, ids, controller):
@@ -180,7 +186,7 @@ class FlightDirector:
                 logger.debug('all drones connected, moving them to start pos')
         elif self.status == FDStatus.GETTING_READY:
             dist_to_start = [self.acs[i].dist_to_ref() for i in self.ids]
-            if np.max(dist_to_start) < 0.3:
+            if np.max(dist_to_start) < DIST_TO_START_THRESHOLD:
                 self.duree_du_show = self.trajectories.trajectory_duration()
                 self.status, self.t0 = FDStatus.GUIDING, time.time()
                 logger.debug('all drones arrived to start, starting the show')
