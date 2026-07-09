@@ -364,9 +364,9 @@ class CercleSafe1(p_mt.Circle):
         p_mt.Circle.__init__(self, [0, 0, 1.5], r=1., v=1., psit=p_t1d.CstOne(0))
 
 class CercleSafe2(p_mt.Circle):
-    name, desc = 'cercle safe 2', 'Rayon 3m'
+    name, desc = 'cercle safe 2', 'Rayon 2.5m'
     def __init__(self):
-        p_mt.Circle.__init__(self, [0, 0, 1.5], r=3., v=2., psit=p_t1d.CstOne(0))
+        p_mt.Circle.__init__(self, [0, 0, 1.5], r=2.5, v=2., psit=p_t1d.CstOne(0))
 
 class CercleSafe3(p_mt.Circle):
     name, desc = 'cercle safe 3', 'Rayon 5m'
