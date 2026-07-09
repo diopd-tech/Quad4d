@@ -27,6 +27,13 @@ _DEFAULT_COLORS = ["#1E78B3", "#FF800E", "#2BA02B"]
 _VALUE = "#C7D0CB"
 _MUTED = "#8B938F"
 
+# Battery pack: Gens Ace Soaring 2700mAh 3S (11.1V nominal, 12.6V full)
+_BATT_CELLS  = 3
+_BATT_LOW_V  = 3.5 * _BATT_CELLS   # 10.5V: plan to land
+_BATT_CRIT_V = 3.3 * _BATT_CELLS   # 9.9V: land now
+_BATT_LOW_COLOR  = "#F2A33C"
+_BATT_CRIT_COLOR = "#F85149"       # same red as the HMI error state
+
 
 PANEL_STYLE = """
 QGroupBox#dronesPanel {
@@ -95,16 +102,21 @@ class _DroneRow(QFrame):
 
 
     def set_values(self, alt, spd, dist, batt=None):
-        def cell(label, value, unit, fmt, color=_VALUE):
+        def cell(label, value, unit, fmt, color=_VALUE, bold=False):
             v = (fmt % value + unit) if value is not None else "\u2014"
-            return f'{label} <span style="color:{color}">{v}</span>'
-        # TODO: color batt red below a low-voltage threshold once the
-        # battery's cell count is known (need volts/cell, not just pack V).
+            weight = "font-weight:700;" if bold else ""
+            return f'{label} <span style="color:{color};{weight}">{v}</span>'
+        batt_color, batt_bold = _VALUE, False
+        if batt is not None:
+            if batt < _BATT_CRIT_V:
+                batt_color, batt_bold = _BATT_CRIT_COLOR, True
+            elif batt < _BATT_LOW_V:
+                batt_color = _BATT_LOW_COLOR
         self.lbl_metrics.setText(
             cell("alt", alt, "m", "%.2f") + "   "
             + cell("spd", spd, "m/s", "%.1f") + "   "
             + cell("dist", dist, "m", "%.2f") + "   "
-            + cell("batt", batt, "V", "%.1f"))
+            + cell("batt", batt, "V", "%.1f", batt_color, batt_bold))
 
 
 class DronesPanel(QGroupBox):
