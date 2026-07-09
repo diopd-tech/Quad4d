@@ -343,9 +343,12 @@ class QueueLeuLeu1(QueueLeuLeu):
 class QueueLeuLeu2(QueueLeuLeu):
     name, desc = 'queue leu leu 2', 'Course with delay2'
     def __init__(self):
-        wps_2 = [[-2, 5, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3], 
-               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2], 
-               [0.5, 2.5, 1.5], [-2, 5, 1]]
+        # start moved y=5 -> y=2 to stay inside the +/-3m envelope; still a
+        # distinct parking spot from qll1, and the 8 shared course waypoints
+        # are untouched (the deliberate conflict course is preserved)
+        wps_2 = [[-2, 2, 1], [0.5, 2.5, 2.5], [1.9, 1.5, 3], [2, 0, 3],
+               [0, -2, 3], [-1, -2.2, 2.5], [0, -2, 2], [2, 1, 2],
+               [0.5, 2.5, 1.5], [-2, 2, 1]]
         super().__init__(wps=wps_2, delay=0.0)
 
 class QueueLeuLeu3(QueueLeuLeu):
@@ -369,9 +372,11 @@ class CercleSafe2(p_mt.Circle):
         p_mt.Circle.__init__(self, [0, 0, 1.5], r=2.5, v=2., psit=p_t1d.CstOne(0))
 
 class CercleSafe3(p_mt.Circle):
-    name, desc = 'cercle safe 3', 'Rayon 5m'
+    name, desc = 'cercle safe 3', 'Rayon 3m, z=2.7'
     def __init__(self):
-        p_mt.Circle.__init__(self, [0, 0, 1.5], r=5., v=3., psit=p_t1d.CstOne(0))
+        # r shrunk 5->3 to stay inside the +/-3m envelope; raised to z=2.7 to
+        # keep >1.2m 3D separation from cercle safe 2 (r=2.5, z=1.5)
+        p_mt.Circle.__init__(self, [0, 0, 2.7], r=3., v=2.4, psit=p_t1d.CstOne(0))
 
 
 
@@ -429,8 +434,10 @@ class ShowTornadoMid(p_mt.Circle):
     name, desc = 'show tornado mid', 'concentric ring r=2.5 z=2.6 v=2.0'
     def __init__(self): p_mt.Circle.__init__(self, [0,0,2.6], r=2.5, v=2.0, psit=p_t1d.CstOne(0))
 class ShowTornadoOuter(p_mt.Circle):
-    name, desc = 'show tornado outer', 'concentric ring r=3.5 z=3.4 v=2.5'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.4], r=3.5, v=2.5, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado outer', 'concentric ring r=3 z=3.8 v=2.5'
+    # r shrunk 3.5->3 for the +/-3m envelope; raised z 3.4->3.8 to keep
+    # >1.2m 3D separation from the mid ring (r=2.5, z=2.6)
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.8], r=3., v=2.5, psit=p_t1d.CstOne(0))
 
 
 # --- Counter-rotating twin rings: same circle, OPPOSITE direction (r sign),
