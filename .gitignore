@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# operator-composed scenarios are per-machine user data
+src/qt_gui/data/custom_scenarios.yaml

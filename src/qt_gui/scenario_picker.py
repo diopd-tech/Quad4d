@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import logging
+from custom_scenarios import (load_custom_scenarios, save_custom_scenario,
+                              CustomScenarioDialog)
 from PySide6.QtWidgets import (QDialog, QWidget, QLabel, QPushButton, QSpinBox,
                                QVBoxLayout, QHBoxLayout, QListWidget, QGroupBox,
                                QScrollArea)
@@ -70,7 +72,8 @@ class ScenarioPickerDialog(QDialog):
 
     def __init__(self, scenarios, preselect=0, parent=None):
         super().__init__(parent)
-        self.scenarios = scenarios
+        # predefined scenarios + the operator's saved custom ones
+        self.scenarios = list(scenarios) + load_custom_scenarios()
         self._id_spins = []
 
         self.setWindowTitle("Click'n Fly - Select scenario")
@@ -88,13 +91,8 @@ class ScenarioPickerDialog(QDialog):
         body.setSpacing(10)
 
         self.list = QListWidget()
-        for cls in scenarios:
-            label = cls.__name__
-            desc = getattr(cls, "desc", None)
-            if desc:
-                label += f" — {desc}"
-            label += f"   ({len(cls.ids)} drone(s))"
-            self.list.addItem(label)
+        for cls in self.scenarios:
+            self.list.addItem(self._label(cls))
         self.list.setMinimumWidth(300)
         self.list.currentRowChanged.connect(self._on_selection_changed)
         body.addWidget(self.list, stretch=1)
@@ -111,6 +109,9 @@ class ScenarioPickerDialog(QDialog):
         outer.addLayout(body, stretch=1)
 
         buttons = QHBoxLayout()
+        self.button_custom = QPushButton("New custom scenario...")
+        self.button_custom.clicked.connect(self._on_new_custom)
+        buttons.addWidget(self.button_custom)
         buttons.addStretch(1)
         self.button_quit = QPushButton("Quit")
         self.button_quit.clicked.connect(self.reject)
@@ -123,8 +124,28 @@ class ScenarioPickerDialog(QDialog):
 
         self.setStyleSheet(STYLE)
 
-        preselect = preselect if 0 <= preselect < len(scenarios) else 0
+        preselect = preselect if 0 <= preselect < len(self.scenarios) else 0
         self.list.setCurrentRow(preselect)
+
+    @staticmethod
+    def _label(cls):
+        label = cls.__name__
+        desc = getattr(cls, "desc", None)
+        if desc:
+            label += f" — {desc}"
+        label += f"   ({len(cls.ids)} drone(s))"
+        return label
+
+    def _on_new_custom(self):
+        dlg = CustomScenarioDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        name, desc, ids, trajs = dlg.result_scenario
+        save_custom_scenario(name, desc, ids, trajs)
+        cls = type(str(name), (), {'desc': desc, 'ids': ids, 'trajs': trajs})
+        self.scenarios.append(cls)
+        self.list.addItem(self._label(cls))
+        self.list.setCurrentRow(len(self.scenarios) - 1)
 
     def _on_selection_changed(self, row):
         while self.detail_layout.count():
