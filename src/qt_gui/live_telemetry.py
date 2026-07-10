@@ -10,9 +10,10 @@
 #
 import time
 from collections import deque
+from itertools import combinations
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 _SPEED_ALPHA = 0.3    # EMA smoothing of the speed estimate (same as drones_panel)
@@ -39,6 +40,8 @@ class TelemetryRecorder:
         self.ids = list(ids)
         self.data = {_id: {k: deque(maxlen=maxlen) for k in ('t', 'alt', 'spd', 'dist')}
                      for _id in self.ids}
+        # global series: min pairwise inter-drone distance (the avoidance metric)
+        self.gdata = {k: deque(maxlen=maxlen) for k in ('t', 'mindist')}
         self._prev = {}
         self._speed = {}
 
@@ -48,11 +51,13 @@ class TelemetryRecorder:
         # dist_to_ref is only meaningful once a reference is being tracked;
         # before that Tref is the identity and the distance would be garbage
         tracking = getattr(fd.status, 'name', '') in ('GETTING_READY', 'GUIDING')
+        pos_now = {}
         for _id in self.ids:
             ac = fd.acs.get(_id)
             if ac is None or not ac.vehicle_traj:   # no pose received yet
                 continue
             pos = np.asarray(ac.T[:3, 3], dtype=float)
+            pos_now[_id] = pos
             # speed: smoothed numerical derivative of the measured position
             v_est = self._speed.get(_id, 0.)
             prev = self._prev.get(_id)
@@ -69,6 +74,14 @@ class TelemetryRecorder:
             d['spd'].append(v_est)
             d['dist'].append(ac.dist_to_ref() if tracking else float('nan'))
 
+        # min pairwise separation (needs at least two measured drones)
+        if len(pos_now) >= 2:
+            dmin = min(np.linalg.norm(a - b) for a, b in combinations(pos_now.values(), 2))
+        else:
+            dmin = float('nan')
+        self.gdata['t'].append(t)
+        self.gdata['mindist'].append(dmin)
+
 
 class LiveTelemetryWindow(QWidget):
     """Scrolling oscilloscope-style view of a TelemetryRecorder.
@@ -81,7 +94,7 @@ class LiveTelemetryWindow(QWidget):
         super().__init__()
         self.recorder = recorder
         self.setWindowTitle("Click'n Fly - Live telemetry")
-        self.resize(900, 620)
+        self.resize(900, 780)   # 4 stacked plots
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -92,7 +105,8 @@ class LiveTelemetryWindow(QWidget):
         prev = None
         for row, (key, title, unit) in enumerate([('alt', 'altitude', 'm'),
                                                   ('spd', 'speed', 'm/s'),
-                                                  ('dist', 'distance to reference', 'm')]):
+                                                  ('dist', 'distance to reference', 'm'),
+                                                  ('mindist', 'min inter-drone distance', 'm')]):
             p = self.glw.addPlot(row=row, col=0)
             p.setLabel('left', title, units=unit)
             p.showGrid(x=True, y=True, alpha=0.3)
@@ -100,9 +114,17 @@ class LiveTelemetryWindow(QWidget):
                 p.setXLink(prev)
             prev = p
             self.plots[key] = p
-        self.plots['dist'].setLabel('bottom', 'time', units='s')
+        self.plots['mindist'].setLabel('bottom', 'time', units='s')
         self.legend = self.plots['alt'].addLegend()
 
+        # global (not per-drone) curve: the avoidance metric, with the 1m
+        # safety-distance line the conflict detector uses as reference
+        self.plots['mindist'].addItem(pg.InfiniteLine(
+            pos=1.0, angle=0, pen=pg.mkPen('#F2A33C', style=Qt.PenStyle.DashLine)))
+        self.mindist_curve = self.plots['mindist'].plot(
+            [], [], pen=pg.mkPen('#E8ECEA', width=2), connect='finite')
+
+        self._per_drone_keys = ('alt', 'spd', 'dist')
         self.curves = {}   # (key, drone id) -> PlotDataItem
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh)
@@ -118,7 +140,7 @@ class LiveTelemetryWindow(QWidget):
         self.curves = {}
         for i, _id in enumerate(self.recorder.ids):
             pen = pg.mkPen(_COLORS[i % len(_COLORS)], width=2)
-            for key in self.plots:
+            for key in self._per_drone_keys:
                 name = f'drone {_id}' if key == 'alt' else None
                 self.curves[(key, _id)] = self.plots[key].plot(
                     [], [], pen=pen, connect='finite', name=name)
@@ -135,7 +157,11 @@ class LiveTelemetryWindow(QWidget):
                 continue
             t = np.array(d['t'])
             tmax = max(tmax, t[-1])
-            for key in self.plots:
+            for key in self._per_drone_keys:
                 self.curves[(key, _id)].setData(t, np.array(d[key], dtype=float))
+        g = self.recorder.gdata
+        if g['t']:
+            self.mindist_curve.setData(np.array(g['t']),
+                                       np.array(g['mindist'], dtype=float))
         if tmax > 0.:
             self.plots['alt'].setXRange(max(0., tmax - _WINDOW_S), max(1., tmax), padding=0)
