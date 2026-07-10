@@ -46,8 +46,9 @@ AVOID_D0       = 1.1   # m, repulsion trigger distance (was 1.5: > nominal separ
 AVOID_D_MIN    = 0.7   # m, center-to-center distance of FULL repulsion (the hard bubble).
                        # Was 0.4: with ~0.4m-wide quads that meant props already touching;
                        # 0.7 leaves ~30cm of real air and steepens the force ramp
-AVOID_K_MAX    = 5.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14);
-                       # with dp_max + zeta containing the coasting, a stronger kick is safe
+AVOID_K_MAX    = 6.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14),
+                       # 5 still too close for the quads' physical size; back to the
+                       # original 6, now safe since dp_max + zeta contain the coasting
 AVOID_TAU      = 1.5   # s, closest-approach prediction horizon (earlier anticipation of
                        # moving crossings; does not affect static formation separations)
 AVOID_ZETA     = 3.0   # 1/s, return stiffness: higher = snappier return, less coasting
