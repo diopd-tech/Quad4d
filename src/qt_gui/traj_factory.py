@@ -6,6 +6,18 @@ import pat3.trajectory_1D as p_t1d
 import pat3.vehicles.rotorcraft.multirotor_trajectory as p_mt
 import pat3.vehicles.rotorcraft.multirotor_trajectory_dev as p_mt_dev
 
+class ClosedLoop(p_mt.CompositeTraj):
+    """Wrap a trajectory whose start != end so it loops without a jump.
+    Appends a smooth min-snap segment from the end state back to the
+    start state; SmoothLine matches the full flat output (position AND
+    derivatives) at both ends, so the join is velocity/accel-continuous."""
+    def __init__(self, traj, return_duration=8.):  # 4s dove ~5m down at ~2.3 m/s, through own downwash (vortex ring risk)
+        Y_end   = traj.get(traj.duration)
+        Y_start = traj.get(0.)
+        return_seg = p_mt.SmoothLine(Y_end, Y_start, duration=return_duration)
+        p_mt.CompositeTraj.__init__(self, [traj, return_seg])
+
+
 class Traj1(p_mt.Circle):
     name, desc = 'circle north', 'circle r=2 v=2, constant heading and height'
     def __init__(self): p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=2., psit=p_t1d.CstOne(0))
@@ -38,21 +50,24 @@ class Traj6(p_mt.CircleWithIntro):
                          #r=2., v=1., dt_intro=5., dt_stay=0.5, psit=p_t1d.CstOne(0.))
                          r=2., v=2., dt_intro=5., dt_stay=0.5, psit=p_t1d.CstOne(0.))
 
-class Traj61(p_mt.CircleWithIntro):
-    name, desc = 'circle_with_intro1', 'circle with intro'
+class Traj61(ClosedLoop):
+    name, desc = 'circle_with_intro1', 'circle with intro, closed loop'
     def __init__(self):
-        super().__init__(Y0=[-0.5, -0.5, 1., 0], c=[-1, 0, 2.],
-                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.))
-class Traj62(p_mt.CircleWithIntro):
-    name, desc = 'circle_with_intro2', 'circle with intro'
+        # ClosedLoop: without it the looping show teleported the reference
+        # back to Y0 at wrap; with 3 drones whose Y0s are <1m apart, all
+        # references converged at once and the avoidance blew up
+        super().__init__(p_mt.CircleWithIntro(Y0=[-0.5, -0.5, 1., 0], c=[-1, 0, 2.],
+                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.)))
+class Traj62(ClosedLoop):
+    name, desc = 'circle_with_intro2', 'circle with intro, closed loop'
     def __init__(self):
-        super().__init__(Y0=[0., 0., 1.5, 0], c=[0, 0, 2.5],
-                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.))
-class Traj63(p_mt.CircleWithIntro):
-    name, desc = 'circle_with_intro3', 'circle with intro'
+        super().__init__(p_mt.CircleWithIntro(Y0=[0., 0., 1.5, 0], c=[0, 0, 2.5],
+                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.)))
+class Traj63(ClosedLoop):
+    name, desc = 'circle_with_intro3', 'circle with intro, closed loop'
     def __init__(self):
-        super().__init__(Y0=[0.5, 0.5, 2., 0], c=[1, 0, 3.],
-                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.))
+        super().__init__(p_mt.CircleWithIntro(Y0=[0.5, 0.5, 2., 0], c=[1, 0, 3.],
+                         r=2., v=1., dt_intro=5., dt_stay=5., psit=p_t1d.CstOne(0.)))
         
 class Traj7(p_mt.Oval):
     name, desc = 'oval', 'oval'
@@ -547,17 +562,6 @@ class ScaraRace(p_mt.CompositeTraj):
             steps.append(p_mt.Cst(coins[i+1], duration=t_dwell))                  # arret (dwell)
         super().__init__(steps)
 
-
-class ClosedLoop(p_mt.CompositeTraj):
-    """Wrap a trajectory whose start != end so it loops without a jump.
-    Appends a smooth min-snap segment from the end state back to the
-    start state; SmoothLine matches the full flat output (position AND
-    derivatives) at both ends, so the join is velocity/accel-continuous."""
-    def __init__(self, traj, return_duration=8.):  # 4s dove ~5m down at ~2.3 m/s, through own downwash (vortex ring risk)
-        Y_end   = traj.get(traj.duration)
-        Y_start = traj.get(0.)
-        return_seg = p_mt.SmoothLine(Y_end, Y_start, duration=return_duration)
-        p_mt.CompositeTraj.__init__(self, [traj, return_seg])
 
 
 def _spirale_montante(a0):

@@ -25,15 +25,19 @@ def repulsive_acc(p_self, v_self, others_pv, d0=1.5, d_min=0.4, k_max=6.0, tau=1
 class ReactiveAvoidance:
 
     def __init__(self, d0=1.2, d_min=0.4, k_max=4.0, zeta=2.0 , tau=1.0,
-                 mode='deform', z_weight=1.0, bounds=None):
+                 mode='deform', z_weight=1.0, bounds=None, dp_max=None):
         self.d0, self.d_min, self.k_max = d0, d_min, k_max
-        self.zeta = zeta          
-        self.tau = tau 
+        self.zeta = zeta
+        self.tau = tau
         self.mode = mode
         self.z_weight = z_weight  # <1 to soften vertical pushes (height already separated)
-        self.bounds = bounds      
-        self.dp = {}              
-        self.dv = {}  
+        self.bounds = bounds
+        self.dp_max = dp_max      # hard cap (m) on the deformation amplitude:
+                                  # the integrator has momentum (dv keeps dp
+                                  # growing after the threat has passed), this
+                                  # bounds how far a reference can coast away
+        self.dp = {}
+        self.dv = {}
         #self.omega = omega
 
 
@@ -68,6 +72,16 @@ class ReactiveAvoidance:
             #da = da_rep - 2.0*self.zeta*self.omega*dv - (self.omega**2)*dp   # >>> MODIF : ζ et ω indépendants
             dv = dv + da * dt
             dp = dp + dv * dt
+
+            # cap the deformation amplitude: kill the outward velocity when
+            # saturated so the offset doesn't fight the cap
+            if self.dp_max is not None:
+                n = np.linalg.norm(dp)
+                if n > self.dp_max:
+                    dp *= self.dp_max / n
+                    outward = float(dv @ dp) / max(float(dp @ dp), 1e-9)
+                    if outward > 0.:
+                        dv -= outward * dp   # remove the component pushing past the cap
 
             Yrefs[i][:3, 0] += dp
             Yrefs[i][:3, 1] += dv

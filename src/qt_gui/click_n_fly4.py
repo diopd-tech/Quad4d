@@ -37,11 +37,17 @@ logger = logging.getLogger(__name__)
 DIST_TO_START_THRESHOLD = 0.3
 
 # --- Reactive avoidance tuning (see reactive_avoidance.py) -------------
-AVOID_D0    = 1.5    # m, repulsion trigger distance (at closest approach)
-AVOID_K_MAX = 6.0    # m/s2, max repulsive accel. CAUTION: flight tests showed
-                     # the quads track ~2 m/s2; bursts above that will be
-                     # followed only partially. Tune down if tracking degrades.
-AVOID_TAU   = 1.2    # s, closest-approach prediction horizon
+# Sim campaign findings (scen 2/3/9): d0 MUST stay below the show's nominal
+# inter-drone separation (~1.1m on the intro-circles shows), else the
+# avoidance fights the choreography continuously; and a large k_max builds
+# so much deformation velocity that references coast far away after the
+# threat has passed before the spring pulls them back.
+AVOID_D0       = 1.1   # m, repulsion trigger distance (was 1.5: > nominal separation!)
+AVOID_K_MAX    = 2.5   # m/s2, max repulsive accel (was 6: quads track ~2 m/s2)
+AVOID_TAU      = 1.2   # s, closest-approach prediction horizon
+AVOID_ZETA     = 3.0   # 1/s, return stiffness: higher = snappier return, less coasting
+AVOID_Z_WEIGHT = 0.5   # soften vertical pushes (shows already separate by height)
+AVOID_DP_MAX   = 1.5   # m, hard cap on how far a reference can be deformed
 # Deformed references are clamped inside these bounds. Trajectories are
 # designed within +/-3m (obstacles near the cage); leave 0.5m of headroom
 # for the avoidance to push into, still inside the nominal safe zone.
@@ -162,7 +168,9 @@ class FlightDirector:
         # reactive deconfliction: deforms the references away from measured
         # conflicts (APF repulsion) while the show is flying
         self.avoider = ReactiveAvoidance(d0=AVOID_D0, k_max=AVOID_K_MAX, tau=AVOID_TAU,
-                                         mode='deform', bounds=AVOID_BOUNDS)
+                                         zeta=AVOID_ZETA, z_weight=AVOID_Z_WEIGHT,
+                                         dp_max=AVOID_DP_MAX, mode='deform',
+                                         bounds=AVOID_BOUNDS)
 
     def on_pprz_external_pose(self, sender, msg):
         pos_enu = [msg[_c] for _c in ['enu_x', 'enu_y', 'enu_z']]
@@ -283,7 +291,8 @@ class Application(QApplication):
         self.operator_view = OperatorWindow(self, self.model, self.fd)
         self.operator_view.show()
         self.operator_view.log_text(
-            f'Reactive avoidance armed: d0={AVOID_D0}m, k_max={AVOID_K_MAX}m/s2, tau={AVOID_TAU}s')
+            f'Reactive avoidance armed: d0={AVOID_D0}m, k_max={AVOID_K_MAX}m/s2, '
+            f'tau={AVOID_TAU}s, zeta={AVOID_ZETA}, dp_max={AVOID_DP_MAX}m')
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.periodic)
