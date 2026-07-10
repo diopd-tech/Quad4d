@@ -43,7 +43,10 @@ DIST_TO_START_THRESHOLD = 0.3
 # so much deformation velocity that references coast far away after the
 # threat has passed before the spring pulls them back.
 AVOID_D0       = 1.1   # m, repulsion trigger distance (was 1.5: > nominal separation!)
-AVOID_K_MAX    = 4.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14);
+AVOID_D_MIN    = 0.7   # m, center-to-center distance of FULL repulsion (the hard bubble).
+                       # Was 0.4: with ~0.4m-wide quads that meant props already touching;
+                       # 0.7 leaves ~30cm of real air and steepens the force ramp
+AVOID_K_MAX    = 5.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14);
                        # with dp_max + zeta containing the coasting, a stronger kick is safe
 AVOID_TAU      = 1.5   # s, closest-approach prediction horizon (earlier anticipation of
                        # moving crossings; does not affect static formation separations)
@@ -169,10 +172,10 @@ class FlightDirector:
         self.duree_du_show = self.trajectories.trajectory_duration()  #POur avoir la durée du show
         # reactive deconfliction: deforms the references away from measured
         # conflicts (APF repulsion) while the show is flying
-        self.avoider = ReactiveAvoidance(d0=AVOID_D0, k_max=AVOID_K_MAX, tau=AVOID_TAU,
-                                         zeta=AVOID_ZETA, z_weight=AVOID_Z_WEIGHT,
-                                         dp_max=AVOID_DP_MAX, mode='deform',
-                                         bounds=AVOID_BOUNDS)
+        self.avoider = ReactiveAvoidance(d0=AVOID_D0, d_min=AVOID_D_MIN, k_max=AVOID_K_MAX,
+                                         tau=AVOID_TAU, zeta=AVOID_ZETA,
+                                         z_weight=AVOID_Z_WEIGHT, dp_max=AVOID_DP_MAX,
+                                         mode='deform', bounds=AVOID_BOUNDS)
 
     def on_pprz_external_pose(self, sender, msg):
         pos_enu = [msg[_c] for _c in ['enu_x', 'enu_y', 'enu_z']]
