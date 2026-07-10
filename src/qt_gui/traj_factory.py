@@ -195,12 +195,17 @@ class Traj17(p_mt.Trajectory):
         
 class Traj42(p_mt_dev.SpaceIndexedTraj):
     name, desc = 'space indexed race track 1', 'Space indexed waypoint trajectory example 1'
-    def __init__(self, wps=None, dyn_pts=None):
-        wps = wps if wps is not None else [[0.2,0, 1],[2.,3., 2], [2.,-3., 3], [-2.,-3., 4], [-2.,3., 3], [-0.2, 0., 2]]
+    def __init__(self, wps=None, dyn_pts=None, bc="periodic"):
+        # The geometry is a QUINTIC spline (k=5, needed for flatness): with
+        # free ends (bc=None) it oscillates wildly near the path boundaries
+        # (chronogram showed x/z excursions 2m beyond the waypoints). Closing
+        # the path (first==last) with bc="periodic" tames it, and also removes
+        # the reference teleport when the looping show wraps.
+        wps = wps if wps is not None else [[0.2,0, 1],[2.,2.6, 2], [2.,-2.6, 3], [-2.,-2.6, 4], [-2.,2.6, 3], [0.2, 0., 1]]
         # time axis stretched x2 (cruise was ~4.7 m/s, too fast to track)
         dyn_pts = dyn_pts if dyn_pts is not None else [[0,0],[2., 0], [9.,0.1], [15.,0.7], [20.,0.9], [28., 1.], [30,1.]]
         self.wps = np.array(wps)
-        self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps)
+        self.wp_traj = p_mt_dev.SpaceWaypoints2(self.wps, bc=bc)
         self.dyn_ctl_pts = np.array(dyn_pts)
         self.dyn_segments = [p_t1d.AffOne(self.dyn_ctl_pts[i], self.dyn_ctl_pts[i+1]) for i in range(len(self.dyn_ctl_pts)-1)]
         self.dyn_traj = p_t1d.SmoothedCompositeOne(self.dyn_segments, eps=0.75)
@@ -246,17 +251,23 @@ class Traj43(Traj42):
         pass # TODO
 
 class Traj44(Traj42):
-    name, desc = 'space indexed slalon', 'Space indexed waypoint slalom'
+    name, desc = 'space indexed slalon', 'Space indexed waypoint slalom, closed loop'
     def __init__(self):
-        wps = np.array([[0, -3, 1.5],
-                        [2, -2, 2.5],
-                        [0, -1, 1.2],
-                        [2,  0, 2.5],
-                        [0,  1, 1.5],
-                        [2,  2, 2.5],
-                        [0,  3, 1.5]])
-        # time axis stretched x2 (was ~4 m/s through the tight slalom turns)
-        dyn_pts = [[0,0],[2., 0], [4.,0.1], [6.,0.2], [10.,0.7], [14.,0.8], [18., 1.], [20,1.]]
+        # closed loop: zigzag out, then a return corridor at x=-1.5 back to
+        # the start (first==last, bc periodic) so the quintic spline stays
+        # tame at the seams; y pulled 3 -> 2.6 for the +/-3m envelope
+        wps = np.array([[ 0. , -2.6, 1.5],
+                        [ 2. , -1.8, 2.5],
+                        [ 0. , -1. , 1.2],
+                        [ 2. ,  0. , 2.5],
+                        [ 0. ,  1. , 1.5],
+                        [ 2. ,  1.8, 2.5],
+                        [ 0. ,  2.6, 1.5],
+                        [-1.5,  1.3, 2. ],
+                        [-1.5, -1.3, 2. ],
+                        [ 0. , -2.6, 1.5]])
+        # duration stretched for the longer (closed) path, ~1-1.5 m/s cruise
+        dyn_pts = [[0,0],[2., 0], [6.,0.15], [20.,0.85], [26., 1.], [28,1.]]
         super().__init__(wps, dyn_pts)
 
 
