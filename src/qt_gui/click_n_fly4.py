@@ -37,23 +37,20 @@ logger = logging.getLogger(__name__)
 DIST_TO_START_THRESHOLD = 0.3
 
 # --- Reactive avoidance tuning (see reactive_avoidance.py) -------------
-# Sim campaign findings (scen 2/3/9): d0 MUST stay below the show's nominal
-# inter-drone separation (~1.1m on the intro-circles shows), else the
-# avoidance fights the choreography continuously; and a large k_max builds
-# so much deformation velocity that references coast far away after the
-# threat has passed before the spring pulls them back.
-AVOID_D0       = 1.1   # m, repulsion trigger distance (was 1.5: > nominal separation!)
-AVOID_D_MIN    = 0.7   # m, center-to-center distance of FULL repulsion (the hard bubble).
-                       # Was 0.4: with ~0.4m-wide quads that meant props already touching;
-                       # 0.7 leaves ~30cm of real air and steepens the force ramp
-AVOID_K_MAX    = 6.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14),
-                       # 5 still too close for the quads' physical size; back to the
-                       # original 6, now safe since dp_max + zeta contain the coasting
-AVOID_TAU      = 1.5   # s, closest-approach prediction horizon (earlier anticipation of
-                       # moving crossings; does not affect static formation separations)
-AVOID_ZETA     = 3.0   # 1/s, return stiffness: higher = snappier return, less coasting
-AVOID_Z_WEIGHT = 0.5   # soften vertical pushes (shows already separate by height)
-AVOID_DP_MAX   = 1.5   # m, hard cap on how far a reference can be deformed
+# Field verdict after the sim tuning campaign: the ORIGINAL configuration
+# behaves best. Its early bad reputation (references coasting far away,
+# blow-ups at show wrap) turned out to be trajectory bugs since fixed
+# (unclosed circle_with_intro loops teleporting at wrap, quintic spline
+# flailing on the open race track/slalom) rather than the tuning itself.
+# The guards added during the campaign (dp_max cap, zeta, d_min) remain
+# available below for future experiments.
+AVOID_D0       = 1.5   # m, repulsion trigger distance
+AVOID_D_MIN    = 0.4   # m, center-to-center distance of full repulsion
+AVOID_K_MAX    = 6.0   # m/s2, max repulsive accel
+AVOID_TAU      = 1.2   # s, closest-approach prediction horizon
+AVOID_ZETA     = 2.0   # 1/s, return stiffness of the deformation spring
+AVOID_Z_WEIGHT = 1.0   # 1 = full vertical pushes allowed
+AVOID_DP_MAX   = None  # m, hard cap on reference deformation (None = uncapped)
 # Deformed references are clamped inside these bounds. Trajectories are
 # designed within +/-3m (obstacles near the cage); leave 0.5m of headroom
 # for the avoidance to push into, still inside the nominal safe zone.
