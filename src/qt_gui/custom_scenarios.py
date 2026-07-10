@@ -220,7 +220,14 @@ class CustomScenarioDialog(QDialog):
         spin.setRange(0, 999)
         spin.setValue(_DEFAULT_FIRST_ID + len(self._rows))
         spin.setFixedWidth(70)
-        lbl = QLabel(traj_name)
+        # show the loop period: each trajectory loops on its own duration,
+        # so mixing different periods is fine, but it's good to see them
+        try:
+            dur = traj_factory.TrajFactory.get(traj_name)().duration
+            lbl = QLabel(f"{traj_name}   ({dur:.1f}s)")
+        except Exception as e:
+            logger.warning(f"could not instantiate '{traj_name}' for duration: {e}")
+            lbl = QLabel(traj_name)
         lbl.setWordWrap(True)
         btn = QPushButton("✕")
         btn.setObjectName("small")

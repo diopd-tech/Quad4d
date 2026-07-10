@@ -198,7 +198,12 @@ class FlightDirector:
         # drones whose pose we have actually received
         Yrefs, positions = {}, {}
         for idx_traj, id_ac in enumerate(self.ids):
-            Yrefs[id_ac] = self.trajectories.get_trajectory(idx_traj).get(elapsed)
+            traj = self.trajectories.get_trajectory(idx_traj)
+            # each trajectory loops on its OWN period: the show wraps on the
+            # longest one, and shorter trajectories (e.g. a 6.3s circle mixed
+            # with a 20s course) used to teleport mid-lap at the global wrap
+            t_traj = elapsed % traj.duration if traj.duration > 0 else elapsed
+            Yrefs[id_ac] = traj.get(t_traj)
             ac = self.acs[id_ac]
             if ac.vehicle_traj:
                 positions[id_ac] = mu.pos_of_T(ac.T)

@@ -174,7 +174,12 @@ class FlightDirector:
             elapsed = elapsed % self.duree_du_show
 
         for idx_traj, id_ac in enumerate(self.ids): # compute reference pose
-            Yref = self.trajectories.get_trajectory(idx_traj).get(elapsed)
+            traj = self.trajectories.get_trajectory(idx_traj)
+            # each trajectory loops on its OWN period: the show wraps on the
+            # longest one, and shorter trajectories (e.g. a 6.3s circle mixed
+            # with a 20s course) used to teleport mid-lap at the global wrap
+            t_traj = elapsed % traj.duration if traj.duration > 0 else elapsed
+            Yref = traj.get(t_traj)
             Tref = np.eye(4); Tref[:3,3] = Yref[:3,0]
             self.acs[id_ac].set_ref(Tref, Yref)
         drone_status = [self.acs[_id].status for _id in self.ids]
