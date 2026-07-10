@@ -43,8 +43,10 @@ DIST_TO_START_THRESHOLD = 0.3
 # so much deformation velocity that references coast far away after the
 # threat has passed before the spring pulls them back.
 AVOID_D0       = 1.1   # m, repulsion trigger distance (was 1.5: > nominal separation!)
-AVOID_K_MAX    = 2.5   # m/s2, max repulsive accel (was 6: quads track ~2 m/s2)
-AVOID_TAU      = 1.2   # s, closest-approach prediction horizon
+AVOID_K_MAX    = 4.0   # m/s2, max repulsive accel. 2.5 avoided too timidly (scen 14);
+                       # with dp_max + zeta containing the coasting, a stronger kick is safe
+AVOID_TAU      = 1.5   # s, closest-approach prediction horizon (earlier anticipation of
+                       # moving crossings; does not affect static formation separations)
 AVOID_ZETA     = 3.0   # 1/s, return stiffness: higher = snappier return, less coasting
 AVOID_Z_WEIGHT = 0.5   # soften vertical pushes (shows already separate by height)
 AVOID_DP_MAX   = 1.5   # m, hard cap on how far a reference can be deformed
