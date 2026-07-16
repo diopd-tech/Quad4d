@@ -217,7 +217,10 @@ class DronesPanel(QGroupBox):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(rows_box)
-        scroll.setMaximumHeight(260)  # rows grew a nav-state line
+        # no height cap: the operator must see every drone at a glance,
+        # so the panel takes the column's spare space (stretch in the
+        # operator window) and the scrollbar is a last resort only
+        scroll.setMinimumHeight(140)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
         v.addWidget(scroll)

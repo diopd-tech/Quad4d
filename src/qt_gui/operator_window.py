@@ -169,13 +169,14 @@ class OperatorWindow(QMainWindow):
                  for i in range(self.model.trajectory_nb())]
 
         self.drones_panel = DronesPanel(self.fd.ids, colors, trajs)
-        panels.addWidget(self.drones_panel)
+        # the drones panel takes the column's spare vertical space: no
+        # drone hidden behind a scrollbar during a show
+        panels.addWidget(self.drones_panel, stretch=1)
         panels.addWidget(self._build_safety_group())
         panels.addWidget(self._build_controls_group())
-        panels.addStretch(1)
 
         right = QWidget()
-        right.setMinimumWidth(360)
+        right.setMinimumWidth(420)  # wide enough for an unwrapped nav line
         right.setLayout(panels)
         body.addWidget(right, stretch=1)
 
@@ -412,7 +413,8 @@ class OperatorWindow(QMainWindow):
         idx = layout.indexOf(self.drones_panel)
         old_panel = self.drones_panel
         self.drones_panel = DronesPanel(ids, colors, trajs)
-        layout.insertWidget(idx, self.drones_panel)
+        # keep the stretch of the original insertion (spare space to the panel)
+        layout.insertWidget(idx, self.drones_panel, stretch=1)
         layout.removeWidget(old_panel)
         old_panel.deleteLater()
 
