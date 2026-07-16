@@ -34,6 +34,24 @@ _BATT_CRIT_V = 3.3 * _BATT_CELLS   # 9.9V: land now
 _BATT_LOW_COLOR  = "#F2A33C"
 _BATT_CRIT_COLOR = "#F85149"       # same red as the HMI error state
 
+# --- Pre-flight checklist -----------------------------------------------
+# The GCS "green icons", brought into the operator's window (ConOps §4):
+# per drone, is the mocap pose flowing, is the RC link up, is the
+# telemetry downlink alive. Grey = never heard, green = good, red = was
+# there and is gone (the dangerous case).
+_CHECK_COLORS = {"ok": "#3FB950", "warn": _BATT_LOW_COLOR,
+                 "bad": _BATT_CRIT_COLOR, "unknown": _MUTED}
+_MOCAP_STALE_S  = 1.0   # EXTERNAL_POSE flows at mocap rate: >1s = chain down
+_STATUS_STALE_S = 5.0   # ROTORCRAFT_STATUS is slow telemetry: be tolerant
+
+_RC_STATUS_NAMES = {0: "OK", 1: "LOST", 2: "REALLY_LOST"}
+_ARMING_NAMES = ("NO_RC", "WAITING", "ARMING", "ARMED", "DISARMING",
+                 "KILLED", "YAW_CENTERED", "THROTTLE_DOWN",
+                 "NOT_MODE_MANUAL", "UNARMED_IN_AUTO", "THROTTLE_NOT_DOWN",
+                 "STICKS_NOT_CENTERED", "PITCH_NOT_CENTERED",
+                 "ROLL_NOT_CENTERED", "YAW_NOT_CENTERED",
+                 "AHRS_NOT_ALLIGNED", "OUT_OF_GEOFENCE", "LOW_BATTERY")
+
 
 PANEL_STYLE = """
 QGroupBox#dronesPanel {
@@ -86,8 +104,17 @@ class _DroneRow(QFrame):
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_metrics)
 
+        self.lbl_checklist = QLabel()
+        self.lbl_checklist.setStyleSheet(
+            f"color:{_MUTED}; font-size:11px; border:none;"
+            " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
+        v.addWidget(self.lbl_checklist)
+
         self.set_status("UNKNOWN")
         self.set_values(None, None, None, None)
+        self.set_checklist([("mocap", "unknown", "no EXTERNAL_POSE seen yet"),
+                            ("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"),
+                            ("link", "unknown", "no ROTORCRAFT_STATUS seen yet")])
 
 
     def set_status(self, status_name):
@@ -99,6 +126,17 @@ class _DroneRow(QFrame):
     def set_traj_name(self, name):
         self.lbl_traj.setText(name)
         self.lbl_traj.setToolTip(name)
+
+
+    def set_checklist(self, items):
+        """items: list of (label, state, detail) with state in _CHECK_COLORS."""
+        parts, tips = [], []
+        for label, state, detail in items:
+            col = _CHECK_COLORS.get(state, _MUTED)
+            parts.append(f'<span style="color:{col};">●</span> {label}')
+            tips.append(f"{label}: {detail}")
+        self.lbl_checklist.setText("  ".join(parts))
+        self.lbl_checklist.setToolTip("\n".join(tips))
 
 
     def set_values(self, alt, spd, dist, batt=None):
@@ -173,6 +211,43 @@ class DronesPanel(QGroupBox):
     def _set_flight_time(self, text):
         self.lbl_flight_time.setText(text if text is not None else "\u2014")
 
+    @staticmethod
+    def _checklist_items(ac, now):
+        items = []
+
+        # mocap: is the ground->drone EXTERNAL_POSE uplink flowing on the bus
+        t_ext = getattr(ac, "t_last_ext_pose", None)
+        if t_ext is None:
+            items.append(("mocap", "unknown", "no EXTERNAL_POSE seen yet"))
+        elif now - t_ext < _MOCAP_STALE_S:
+            items.append(("mocap", "ok", "EXTERNAL_POSE flowing"))
+        else:
+            items.append(("mocap", "bad", f"EXTERNAL_POSE lost {now - t_ext:.0f}s ago"))
+
+        # RC: last rc_status reported by the drone (arming needs RC OK)
+        rc = getattr(ac, "rc_status", None)
+        arming = getattr(ac, "arming_status", None)
+        arming_name = (_ARMING_NAMES[arming]
+                       if arming is not None and 0 <= arming < len(_ARMING_NAMES)
+                       else "?")
+        if rc is None:
+            items.append(("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"))
+        else:
+            state = {0: "ok", 1: "warn"}.get(rc, "bad")
+            items.append(("RC", state,
+                          f"rc {_RC_STATUS_NAMES.get(rc, rc)}, arming {arming_name}"))
+
+        # link: is the telemetry downlink alive
+        t_status = getattr(ac, "t_last_status", None)
+        if t_status is None:
+            items.append(("link", "unknown", "no ROTORCRAFT_STATUS seen yet"))
+        elif now - t_status < _STATUS_STALE_S:
+            items.append(("link", "ok", "telemetry alive"))
+        else:
+            items.append(("link", "bad", f"telemetry lost {now - t_status:.0f}s ago"))
+
+        return items
+
     def set_traj_name(self, idx, name):
         if 0 <= idx < len(self.ids):
             self.rows[self.ids[idx]].set_traj_name(name)
@@ -194,6 +269,7 @@ class DronesPanel(QGroupBox):
 
             row.set_status(getattr(ac.status, "name", "UNKNOWN"))
             batt = getattr(ac, "battery_v", None)
+            row.set_checklist(self._checklist_items(ac, now))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
                 row.set_values(None, None, None, batt)

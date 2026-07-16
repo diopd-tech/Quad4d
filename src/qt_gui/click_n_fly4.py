@@ -91,6 +91,11 @@ class Drone:
         self.status = DroneStatus.UNKNOWN
         self.battery_v = None
         self.link_down = False   # True once an Ivy send has failed (bus gone)
+        # pre-flight checklist inputs (see drones_panel)
+        self.t_last_ext_pose = None  # last EXTERNAL_POSE seen (mocap uplink)
+        self.t_last_status = None    # last ROTORCRAFT_STATUS (downlink alive)
+        self.rc_status = None        # 0 OK, 1 LOST, 2 REALLY_LOST
+        self.arming_status = None
 
     def connect(self, conf, ivy):
         self.conf = conf
@@ -184,6 +189,7 @@ class FlightDirector:
             ac = self.acs[int(sender)]
         except KeyError: return # unknown
         ac.pose_source = 'external'
+        ac.t_last_ext_pose = time.time()
         ac.set_pose(T)
 
     def run(self): # for now called from GUI thread, maybe use our own thread?
@@ -262,7 +268,13 @@ class FlightDirector:
         try:
             ac = self.acs[sender]
         except KeyError: return # unknown aircraft
+        ac.t_last_status = time.time()
         ac.battery_v = float(msg['vsupply'])
+        try:
+            ac.rc_status = int(msg['rc_status'])
+            ac.arming_status = int(msg['arming_status'])
+        except (KeyError, TypeError, ValueError):
+            pass  # fields absent from this telemetry file: dots stay grey
 
     def get_acs(self): return self.acs
     def quit(self):
@@ -410,7 +422,9 @@ class Application(QApplication):
         if elapsed >= self.dt_control:
             if self.is_guiding:
                 self.fd.run()
-                self.operator_view.drones_panel.update_from_fd(self.fd)
+            # the drones panel doubles as the pre-flight checklist, so it
+            # must live before takeoff, not only while guiding
+            self.operator_view.drones_panel.update_from_fd(self.fd)
             # always record (not only while guiding): staging and manual
             # moves are interesting to see in the live telemetry too
             self.operator_view.record_live_telemetry(self.fd)
