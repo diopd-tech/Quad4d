@@ -109,7 +109,7 @@ class OperatorWindow(QMainWindow):
         self.fd = fd
 
         self.setWindowTitle("Click'n Fly - Operator Control Center")
-        self.resize(1200, 760)
+        self.resize(1200, 840)
 
         scen_menu = self.menuBar().addMenu("Scenario")
         change_scen_action = scen_menu.addAction("Change scenario...")
@@ -335,8 +335,6 @@ class OperatorWindow(QMainWindow):
         # when something goes wrong (ConOps: land rather than kill).
         # Never locked: in-show is when it matters most.
         self.button_land_all = QPushButton("LAND ALL")
-        self.button_land_all.setStyleSheet(
-            "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
         h = getattr(self.app, "on_land_all_clicked", None)
         if h is None:
             self.button_land_all.setEnabled(False)
@@ -349,6 +347,9 @@ class OperatorWindow(QMainWindow):
         kill_row.setSpacing(8)
         self.combo_kill = QComboBox()
         self.button_kill = QPushButton("KILL")
+        # red is for the destructive action: a killed drone falls
+        self.button_kill.setStyleSheet(
+            "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
         self._kill_armed = False
         if getattr(self.app, "on_kill_clicked", None) is None:
             self.button_kill.setEnabled(False)
@@ -392,7 +393,8 @@ class OperatorWindow(QMainWindow):
     def _disarm_kill(self):
         self._kill_armed = False
         self.button_kill.setText("KILL")
-        self.button_kill.setStyleSheet("")
+        self.button_kill.setStyleSheet(
+            "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
 
     def _build_console_group(self):
         group = QGroupBox("PAPARAZZI TELEMETRY CONSOLE")

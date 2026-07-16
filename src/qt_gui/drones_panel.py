@@ -7,7 +7,7 @@
 import time
 import numpy as np
 
-from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel,
+from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel, QSizePolicy,
                                QVBoxLayout, QHBoxLayout, QWidget)
 
 
@@ -83,22 +83,27 @@ class _DroneRow(QFrame):
        
         top = QHBoxLayout()
         top.setSpacing(6)
-  
+
         name = QLabel(f"D{drone_id}")
         name.setStyleSheet("color:#E8ECEA; font-size:12px; font-weight:600; border:none;")
-    
+
+        # trajectory name inline with the header: one line less per row,
+        # so every drone stays fully visible in the fixed-height window
+        self.lbl_traj = QLabel(traj_name)
+        self.lbl_traj.setStyleSheet(f"color:{_MUTED}; font-size:11px; border:none;")
+        self.lbl_traj.setToolTip(traj_name)
+
         self.lbl_status = QLabel()
         self.lbl_status.setStyleSheet("font-size:11px; border:none;")
         top.addWidget(name)
+        top.addWidget(self.lbl_traj)
         top.addStretch(1)
         top.addWidget(self.lbl_status)
         v.addLayout(top)
 
-
-        self.lbl_traj = QLabel(traj_name)
-        self.lbl_traj.setStyleSheet(f"color:{_MUTED}; font-size:11px; border:none;")
-        self.lbl_traj.setToolTip(traj_name)
-        v.addWidget(self.lbl_traj)
+        # never let the column layout squash the row below its natural
+        # height (it silently eats the bottom lines)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
 
         self.lbl_metrics = QLabel()
