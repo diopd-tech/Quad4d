@@ -45,6 +45,11 @@ _MOCAP_STALE_S  = 1.0   # EXTERNAL_POSE flows at mocap rate: >1s = chain down
 _STATUS_STALE_S = 5.0   # ROTORCRAFT_STATUS is slow telemetry: be tolerant
 
 _RC_STATUS_NAMES = {0: "OK", 1: "LOST", 2: "REALLY_LOST"}
+_AP_MODE_NAMES = ("KILL", "FAILSAFE", "HOME", "RATE_DIRECT", "ATTITUDE_DIRECT",
+                  "RATE_RC_CLIMB", "ATTITUDE_RC_CLIMB", "ATTITUDE_CLIMB",
+                  "RATE_Z_HOLD", "ATTITUDE_Z_HOLD", "HOVER_DIRECT",
+                  "HOVER_CLIMB", "HOVER_Z_HOLD", "NAV", "RC_DIRECT",
+                  "CARE_FREE", "FORWARD", "MODULE", "FLIP", "GUIDED")
 _ARMING_NAMES = ("NO_RC", "WAITING", "ARMING", "ARMED", "DISARMING",
                  "KILLED", "YAW_CENTERED", "THROTTLE_DOWN",
                  "NOT_MODE_MANUAL", "UNARMED_IN_AUTO", "THROTTLE_NOT_DOWN",
@@ -110,11 +115,19 @@ class _DroneRow(QFrame):
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_checklist)
 
+        self.lbl_nav = QLabel()
+        self.lbl_nav.setWordWrap(True)
+        self.lbl_nav.setStyleSheet(
+            f"color:{_MUTED}; font-size:11px; border:none;"
+            " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
+        v.addWidget(self.lbl_nav)
+
         self.set_status("UNKNOWN")
         self.set_values(None, None, None, None)
         self.set_checklist([("mocap", "unknown", "no EXTERNAL_POSE seen yet"),
                             ("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"),
                             ("link", "unknown", "no ROTORCRAFT_STATUS seen yet")])
+        self.set_nav("—")
 
 
     def set_status(self, status_name):
@@ -137,6 +150,10 @@ class _DroneRow(QFrame):
             tips.append(f"{label}: {detail}")
         self.lbl_checklist.setText("  ".join(parts))
         self.lbl_checklist.setToolTip("\n".join(tips))
+
+
+    def set_nav(self, html):
+        self.lbl_nav.setText(html)
 
 
     def set_values(self, alt, spd, dist, batt=None):
@@ -200,7 +217,7 @@ class DronesPanel(QGroupBox):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(rows_box)
-        scroll.setMaximumHeight(220)
+        scroll.setMaximumHeight(260)  # rows grew a nav-state line
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
         v.addWidget(scroll)
@@ -248,6 +265,43 @@ class DronesPanel(QGroupBox):
 
         return items
 
+    @staticmethod
+    def _nav_html(ac):
+        """Flight plan / autopilot state line: what the GCS strip shows.
+        e.g.  NAV · Takeoff · motors ON · airborne"""
+        parts = []
+
+        mode = getattr(ac, "ap_mode", None)
+        if mode is None:
+            parts.append("—")
+        else:
+            name = (_AP_MODE_NAMES[mode] if 0 <= mode < len(_AP_MODE_NAMES)
+                    else f"mode {mode}")
+            if name in ("KILL", "FAILSAFE"):
+                parts.append(f'<span style="color:{_BATT_CRIT_COLOR};'
+                             f' font-weight:700;">{name}</span>')
+            else:
+                parts.append(f'<span style="color:{_VALUE};">{name}</span>')
+
+        cur_block = getattr(ac, "cur_block", None)
+        if cur_block is not None:
+            names = getattr(getattr(ac, "blocks", None), "names", [])
+            block = (names[cur_block] if 0 <= cur_block < len(names)
+                     else f"block {cur_block}")
+            parts.append(f'<span style="color:{_VALUE};">{block}</span>')
+
+        motors = getattr(ac, "ap_motors_on", None)
+        if motors is not None:
+            parts.append(f'<span style="color:{_CHECK_COLORS["ok"]};">motors ON</span>'
+                         if motors else "motors off")
+
+        in_flight = getattr(ac, "ap_in_flight", None)
+        if in_flight is not None:
+            parts.append(f'<span style="color:{_VALUE};">airborne</span>'
+                         if in_flight else "on ground")
+
+        return " · ".join(parts)
+
     def set_traj_name(self, idx, name):
         if 0 <= idx < len(self.ids):
             self.rows[self.ids[idx]].set_traj_name(name)
@@ -270,6 +324,7 @@ class DronesPanel(QGroupBox):
             row.set_status(getattr(ac.status, "name", "UNKNOWN"))
             batt = getattr(ac, "battery_v", None)
             row.set_checklist(self._checklist_items(ac, now))
+            row.set_nav(self._nav_html(ac))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
                 row.set_values(None, None, None, batt)

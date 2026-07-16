@@ -98,6 +98,11 @@ class Drone:
         self.rc_status = None        # 0 OK, 1 LOST, 2 REALLY_LOST
         self.arming_status = None
         self.blocks = None           # flight plan block table, set on connect
+        # flight plan / autopilot state shown in the drones panel
+        self.ap_mode = None          # index into the ap_mode values (13 NAV, 19 GUIDED)
+        self.ap_motors_on = None
+        self.ap_in_flight = None
+        self.cur_block = None        # current flight plan block (ground NAV_STATUS)
 
     def connect(self, conf, ivy):
         self.conf = conf
@@ -178,6 +183,7 @@ class FlightDirector:
         self.pprz_connect.ivy.subscribe(self.on_pprz_flight_param, PprzMessage("telemetry", "ROTORCRAFT_FP"))
         self.pprz_connect.ivy.subscribe(self.on_pprz_external_pose, PprzMessage("datalink", "EXTERNAL_POSE"))
         self.pprz_connect.ivy.subscribe(self.on_pprz_status, PprzMessage("telemetry", "ROTORCRAFT_STATUS"))
+        self.pprz_connect.ivy.subscribe(self.on_pprz_nav_status, PprzMessage("ground", "NAV_STATUS"))
         self.status = FDStatus.STAGING
         self.ids, self.acs = ids, {}
         for _id in self.ids:
@@ -294,8 +300,20 @@ class FlightDirector:
         try:
             ac.rc_status = int(msg['rc_status'])
             ac.arming_status = int(msg['arming_status'])
+            ac.ap_mode = int(msg['ap_mode'])
+            ac.ap_motors_on = int(msg['ap_motors_on'])
+            ac.ap_in_flight = int(msg['ap_in_flight'])
         except (KeyError, TypeError, ValueError):
             pass  # fields absent from this telemetry file: dots stay grey
+
+    def on_pprz_nav_status(self, sender, msg):
+        # ground-class message from the pprz server: the aircraft is a
+        # field, not the Ivy sender
+        try:
+            ac = self.acs[int(msg['ac_id'])]
+            ac.cur_block = int(msg['cur_block'])
+        except (KeyError, TypeError, ValueError):
+            return  # unknown aircraft or malformed message
 
     def get_acs(self): return self.acs
     def quit(self):
