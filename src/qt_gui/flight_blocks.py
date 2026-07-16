@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # blocks actually found).
 MOTORS_CANDIDATES  = ('start motors', 'start engine', 'start engines', 'motors on')
 TAKEOFF_CANDIDATES = ('takeoff', 'take off', 'take-off')
+LAND_CANDIDATES    = ('land here', 'land', 'landing')
 
 
 class FlightPlanBlocks:

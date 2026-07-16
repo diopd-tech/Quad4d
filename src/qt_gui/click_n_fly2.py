@@ -158,6 +158,18 @@ class Drone:
 
     def start_motors(self): return self._jump_to_block(fb.MOTORS_CANDIDATES, 'start motors')
     def takeoff(self):      return self._jump_to_block(fb.TAKEOFF_CANDIDATES, 'takeoff')
+    def land(self):         return self._jump_to_block(fb.LAND_CANDIDATES, 'land')
+
+    def kill(self):
+        """Cut the motors (kill_throttle): last resort, the drone falls."""
+        if self.status == DroneStatus.UNKNOWN:
+            return False
+        try:
+            self.settings['kill_throttle'] = 1
+        except Exception as e:
+            logger.warning(f'aircraft {self.conf.id}: kill failed ({e})')
+            return False
+        return True
 
 FDStatus = Enum('FDStatus', [('STAGING', 1), ('GETTING_READY', 2), ('GUIDING', 3), ('FINISHED', 4)])      
 class FlightDirector:
@@ -346,6 +358,29 @@ class Application(QApplication):
 
     def on_takeoff_clicked(self):
         self._flight_plan_step('Takeoff', lambda d: d.takeoff())
+
+    def on_land_all_clicked(self):
+        """Emergency (or end-of-show) landing: stop guiding, hand every
+        drone back to its flight plan on the land block."""
+        self.operator_view.log_text('LAND ALL')
+        self.is_guiding = False
+        self.fd.status = FDStatus.FINISHED
+        for ac_id in self.fd.ids:
+            self.fd.acs[ac_id].release()  # back to NAV: the flight plan executes
+        self._flight_plan_step('Land', lambda d: d.land())
+        self.operator_view.button_guide.setEnabled(True)
+        self.operator_view.button_stop.setEnabled(False)
+        self.operator_view.set_preflight_enabled(True)
+
+    def on_kill_clicked(self, ac_id):
+        drone = self.fd.acs.get(ac_id) or self.fd.drone_pool.get(ac_id)
+        if drone is None:
+            self.operator_view.log_text(f'KILL {ac_id}: unknown drone')
+            return
+        if drone.kill():
+            self.operator_view.log_text(f'KILL sent to drone {ac_id}')
+        else:
+            self.operator_view.log_text(f'KILL {ac_id}: FAILED (see terminal log)')
 
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
