@@ -156,15 +156,29 @@ class Drone:
             return False
         return self._send(lambda: fb.jump_to_block(self.ivy, self.conf.id, block_id))
 
+    def _set_kill(self, kill):
+        """Set/clear kill_throttle. Tries the label values first (the
+        settings manager maps them, cf. auto2='Guided'), then numeric,
+        under the setting names seen in rotorcraft settings files."""
+        last_err = None
+        for name, value in (('kill_throttle', 'ON' if kill else 'OFF'),
+                            ('kill_throttle', 1 if kill else 0),
+                            ('autopilot.kill_throttle', 1 if kill else 0)):
+            try:
+                self.settings[name] = value
+                return True
+            except Exception as e:
+                last_err = e
+        logger.warning(f'aircraft {self.conf.id}: kill_throttle={kill} '
+                       f'failed ({last_err})')
+        return False
+
     def start_motors(self):
         # un-kill first: a landed (flight plan kills throttle at
         # touchdown) or killed drone would ignore the block jump. The
         # GCS equivalent is the Resurrect button.
         if self.status != DroneStatus.UNKNOWN:
-            try:
-                self.settings['kill_throttle'] = 0
-            except Exception as e:
-                logger.warning(f'aircraft {self.conf.id}: resurrect failed ({e})')
+            self._set_kill(False)
         return self._jump_to_block(fb.MOTORS_CANDIDATES, 'start motors')
 
     def takeoff(self):      return self._jump_to_block(fb.TAKEOFF_CANDIDATES, 'takeoff')
@@ -180,12 +194,7 @@ class Drone:
         """Cut the motors (kill_throttle): last resort, the drone falls."""
         if self.status == DroneStatus.UNKNOWN:
             return False
-        try:
-            self.settings['kill_throttle'] = 1
-        except Exception as e:
-            logger.warning(f'aircraft {self.conf.id}: kill failed ({e})')
-            return False
-        return True
+        return self._set_kill(True)
 
 FDStatus = Enum('FDStatus', [('STAGING', 1), ('GETTING_READY', 2), ('GUIDING', 3), ('FINISHED', 4)])      
 class FlightDirector:

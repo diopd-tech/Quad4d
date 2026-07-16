@@ -265,9 +265,15 @@ class DronesPanel(QGroupBox):
         return items
 
     @staticmethod
-    def _nav_html(ac):
+    def _nav_html(ac, now):
         """Flight plan / autopilot state line: what the GCS strip shows.
         e.g.  NAV · Takeoff · motors ON · airborne"""
+        # a silent drone must not keep showing its last known state
+        # (pool-reused drones would display a stale "motors ON" forever)
+        t_status = getattr(ac, "t_last_status", None)
+        if t_status is None or now - t_status >= _STATUS_STALE_S:
+            return "—"
+
         parts = []
 
         mode = getattr(ac, "ap_mode", None)
@@ -323,7 +329,7 @@ class DronesPanel(QGroupBox):
             row.set_status(getattr(ac.status, "name", "UNKNOWN"))
             batt = getattr(ac, "battery_v", None)
             row.set_checklist(self._checklist_items(ac, now))
-            row.set_nav(self._nav_html(ac))
+            row.set_nav(self._nav_html(ac, now))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
                 row.set_values(None, None, None, batt)
