@@ -294,13 +294,22 @@ class FlightDirector:
         try:
             ac = self.acs[sender]
         except KeyError: return # unknown aircraft
+        if ac.t_last_status is None:
+            # first status of the run, raw: the reference to compare with
+            # the GCS when the panel and the strip disagree
+            logger.info(f'first ROTORCRAFT_STATUS from {sender}: {msg}')
         ac.t_last_status = time.time()
         ac.battery_v = float(msg['vsupply'])
         try:
             ac.rc_status = int(msg['rc_status'])
             ac.arming_status = int(msg['arming_status'])
             ac.ap_mode = int(msg['ap_mode'])
-            ac.ap_motors_on = int(msg['ap_motors_on'])
+            motors = int(msg['ap_motors_on'])
+            if motors != ac.ap_motors_on:
+                logger.info(f'aircraft {sender}: motors '
+                            f'{"ON" if motors else "off"} (raw ap_motors_on='
+                            f'{msg["ap_motors_on"]}, ap_mode={msg["ap_mode"]})')
+            ac.ap_motors_on = motors
             ac.ap_in_flight = int(msg['ap_in_flight'])
         except (KeyError, TypeError, ValueError):
             pass  # fields absent from this telemetry file: dots stay grey
