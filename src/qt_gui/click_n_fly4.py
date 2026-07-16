@@ -172,9 +172,25 @@ class Drone:
             return False
         return self._send(lambda: fb.jump_to_block(self.ivy, self.conf.id, block_id))
 
-    def start_motors(self): return self._jump_to_block(fb.MOTORS_CANDIDATES, 'start motors')
+    def start_motors(self):
+        # un-kill first: a landed (flight plan kills throttle at
+        # touchdown) or killed drone would ignore the block jump. The
+        # GCS equivalent is the Resurrect button.
+        if self.status != DroneStatus.UNKNOWN:
+            try:
+                self.settings['kill_throttle'] = 0
+            except Exception as e:
+                logger.warning(f'aircraft {self.conf.id}: resurrect failed ({e})')
+        return self._jump_to_block(fb.MOTORS_CANDIDATES, 'start motors')
+
     def takeoff(self):      return self._jump_to_block(fb.TAKEOFF_CANDIDATES, 'takeoff')
     def land(self):         return self._jump_to_block(fb.LAND_CANDIDATES, 'land')
+
+    def hold_position(self):
+        """Freeze in a Guided hover where the drone currently is."""
+        if self.status == DroneStatus.UNKNOWN:
+            return True
+        return self._send(lambda: self.guided.move_at_ned_vel(self.conf.id))
 
     def kill(self):
         """Cut the motors (kill_throttle): last resort, the drone falls."""
@@ -438,11 +454,14 @@ class Application(QApplication):
         self.operator_view.set_preflight_enabled(False)
 
     def on_stop_clicked(self):
-        self.operator_view.log_text("Show stopped: NAV Mode ")
+        # stay in Guided, hovering in place: the show can be relaunched,
+        # or LAND ALL used for a normal landing. NAV is only given back
+        # by LAND ALL (so the flight plan lands) or at app exit.
+        self.operator_view.log_text('Show stopped: holding position (Guided)')
         self.is_guiding = False
         self.fd.status = FDStatus.FINISHED
         for ac_id in self.fd.ids:
-            self.fd.acs[ac_id].release()
+            self.fd.acs[ac_id].hold_position()
         self.operator_view.button_guide.setEnabled(True)
         self.operator_view.button_stop.setEnabled(False)
         self.operator_view.set_preflight_enabled(True)

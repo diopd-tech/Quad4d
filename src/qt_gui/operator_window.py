@@ -177,7 +177,6 @@ class OperatorWindow(QMainWindow):
         panels.addWidget(self.drones_panel)
         panels.addWidget(self._build_safety_group())
         panels.addWidget(self._build_controls_group())
-        panels.addWidget(self._build_emergency_group())
         panels.addStretch(1)
 
         right = QWidget()
@@ -332,22 +331,9 @@ class OperatorWindow(QMainWindow):
         self.button_stop.setEnabled(False)
         self.button_stop.clicked.connect(self.app.on_stop_clicked)
 
-        self.progress = QProgressBar()
-        self.progress.setValue(0)
-
-
-        v.addWidget(self.button_guide)
-        v.addWidget(self.button_stop)
-        v.addWidget(self.progress)
-        return group
-
-    def _build_emergency_group(self):
-        """Land all / kill: never locked, in-show is exactly when they
-        matter (ConOps: land rather than kill, kill as last resort)."""
-        group = QGroupBox("EMERGENCY")
-        v = QVBoxLayout(group)
-        v.setSpacing(8)
-
+        # land all: the normal end of a flight session, and the reflex
+        # when something goes wrong (ConOps: land rather than kill).
+        # Never locked: in-show is when it matters most.
         self.button_land_all = QPushButton("LAND ALL")
         self.button_land_all.setStyleSheet(
             "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
@@ -356,12 +342,11 @@ class OperatorWindow(QMainWindow):
             self.button_land_all.setEnabled(False)
         else:
             self.button_land_all.clicked.connect(h)
-        v.addWidget(self.button_land_all)
 
-        # kill one drone: pick the id, then two clicks within 3s (an
-        # accidental kill drops a drone out of the sky)
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        # kill one drone (last resort): pick the id, then two clicks
+        # within 3s (an accidental kill drops a drone out of the sky)
+        kill_row = QHBoxLayout()
+        kill_row.setSpacing(8)
         self.combo_kill = QComboBox()
         self.button_kill = QPushButton("KILL")
         self._kill_armed = False
@@ -371,12 +356,19 @@ class OperatorWindow(QMainWindow):
             self.button_kill.clicked.connect(self._on_kill_pressed)
         # changing the target disarms a pending confirmation
         self.combo_kill.currentTextChanged.connect(lambda _t: self._disarm_kill())
-        row.addWidget(QLabel("Drone:"))
-        row.addWidget(self.combo_kill, 1)
-        row.addWidget(self.button_kill)
-        v.addLayout(row)
-
+        kill_row.addWidget(QLabel("Drone:"))
+        kill_row.addWidget(self.combo_kill, 1)
+        kill_row.addWidget(self.button_kill)
         self._refresh_kill_combo()
+
+        self.progress = QProgressBar()
+        self.progress.setValue(0)
+
+        v.addWidget(self.button_guide)
+        v.addWidget(self.button_stop)
+        v.addWidget(self.button_land_all)
+        v.addLayout(kill_row)
+        v.addWidget(self.progress)
         return group
 
     def _refresh_kill_combo(self):
