@@ -230,7 +230,10 @@ class FlightDirector:
         self.known_confs[int(conf.id)] = conf
         if int(conf.id) in self.acs:
             self.acs[int(conf.id)].connect(conf, self.pprz_connect.ivy)
-            self.acs[int(conf.id)].take_control()
+            # do NOT take control (Guided) here: in Guided the autopilot
+            # ignores the flight plan, so the Start motors / Take off
+            # block jumps would be dead. Drones stay in NAV until LAUNCH
+            # SHOW arms Guided (on_guide_clicked).
         
     def on_pprz_flight_param(self, sender, msg):
         pos_enu = [float(msg[_c])/2**8 for _c in ['east', 'north', 'up']]
@@ -330,9 +333,9 @@ class Application(QApplication):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
         self.operator_view.log_text('Take off and trajectory following started')
-        # re-arm Guided mode: a no-op for drones connecting for the first
-        # time (already armed in on_pprz_connect), but required for drones
-        # released to NAV by a previous Stop (e.g. before a scenario switch)
+        # arm Guided mode NOW, not at connect: before launch the drones
+        # stay in NAV so the flight plan (start motors, takeoff blocks)
+        # still executes. This is the single Guided entry point.
         results = [self.fd.acs[ac_id].take_control() for ac_id in self.fd.ids]
         if not all(results):
             self.operator_view.log_text(
@@ -392,7 +395,7 @@ class Application(QApplication):
                 conf = self.fd.known_confs.get(_id)
                 if conf is not None:
                     drone.connect(conf, self.fd.pprz_connect.ivy)
-                    drone.take_control()
+                    # no take_control here either: stay in NAV until launch
             new_acs[_id] = drone
         # drones survive scenario switches (persistent pool), so their flown
         # trace must be cleared explicitly or the old show's trail lingers
