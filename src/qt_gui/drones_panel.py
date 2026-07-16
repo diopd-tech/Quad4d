@@ -7,9 +7,8 @@
 import time
 import numpy as np
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel,
-                               QVBoxLayout, QHBoxLayout, QWidget, QScrollArea)
+                               QVBoxLayout, QHBoxLayout, QWidget)
 
 
 STATUS_COLOR = {
@@ -200,6 +199,9 @@ class DronesPanel(QGroupBox):
         v.addLayout(header)
         self._set_flight_time(None)
 
+        # no scroll area: every drone stays visible at all times (this
+        # panel doubles as pre-flight checklist and in-show health view),
+        # the panel simply grows with the number of drones
         self.rows = {}
         rows_box = QWidget()
         rows_box.setStyleSheet("background:transparent; border:none;")
@@ -208,22 +210,11 @@ class DronesPanel(QGroupBox):
         rows_lay.setSpacing(5)
         for i, _id in enumerate(self.ids):
             color = self.colors[i % len(self.colors)]
-            tname = trajs[i] if i < len(trajs) else "" 
-            row = _DroneRow(_id, color, tname)         
+            tname = trajs[i] if i < len(trajs) else ""
+            row = _DroneRow(_id, color, tname)
             self.rows[_id] = row
             rows_lay.addWidget(row)
-        rows_lay.addStretch(1)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(rows_box)
-        # no height cap: the operator must see every drone at a glance,
-        # so the panel takes the column's spare space (stretch in the
-        # operator window) and the scrollbar is a last resort only
-        scroll.setMinimumHeight(140)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
-        v.addWidget(scroll)
+        v.addWidget(rows_box)
 
         self._prev = {}
         self._speed = {}
