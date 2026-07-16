@@ -27,6 +27,7 @@ from guided_mode import GuidedMode
 from operator_window import OperatorWindow
 from scenario_picker import ScenarioPickerDialog
 from reactive_avoidance import ReactiveAvoidance
+import flight_blocks as fb
 
 logger = logging.getLogger(__name__)
 
@@ -96,11 +97,14 @@ class Drone:
         self.t_last_status = None    # last ROTORCRAFT_STATUS (downlink alive)
         self.rc_status = None        # 0 OK, 1 LOST, 2 REALLY_LOST
         self.arming_status = None
+        self.blocks = None           # flight plan block table, set on connect
 
     def connect(self, conf, ivy):
         self.conf = conf
         self.settings = PprzSettingsManager(conf.settings, conf.id, ivy)
         self.guided = GuidedMode(ivy)
+        self.ivy = ivy
+        self.blocks = fb.FlightPlanBlocks(conf)
         self.status = DroneStatus.CONNECTED
 
     def _send(self, action):
@@ -151,6 +155,20 @@ class Drone:
 
     def dist_to_ref(self):
         return np.linalg.norm(mu.pos_of_T(self.T)-mu.pos_of_T(self.Tref))
+
+    def _jump_to_block(self, candidates, what):
+        if self.status == DroneStatus.UNKNOWN or self.blocks is None:
+            logger.warning(f'{what}: drone not connected, ignored')
+            return False
+        block_id = self.blocks.find(candidates)
+        if block_id is None:
+            logger.warning(f"aircraft {self.conf.id}: no '{what}' block in "
+                           f'flight plan (has: {self.blocks.names})')
+            return False
+        return self._send(lambda: fb.jump_to_block(self.ivy, self.conf.id, block_id))
+
+    def start_motors(self): return self._jump_to_block(fb.MOTORS_CANDIDATES, 'start motors')
+    def takeoff(self):      return self._jump_to_block(fb.TAKEOFF_CANDIDATES, 'takeoff')
 
 FDStatus = Enum('FDStatus', [('STAGING', 1), ('GETTING_READY', 2), ('GUIDING', 3), ('FINISHED', 4)])
 class FlightDirector:
@@ -329,6 +347,22 @@ class Application(QApplication):
         self.fd.quit()
         self.quit()
 
+    def _flight_plan_step(self, label, action):
+        """Send a flight plan jump to every drone of the scenario."""
+        failed = [str(_id) for _id in self.fd.ids
+                  if not action(self.fd.acs[_id])]
+        if failed:
+            self.operator_view.log_text(
+                f'{label}: FAILED for drone(s) {", ".join(failed)} (see terminal log)')
+        else:
+            self.operator_view.log_text(f'{label} sent to {len(self.fd.ids)} drone(s)')
+
+    def on_motors_clicked(self):
+        self._flight_plan_step('Start motors', lambda d: d.start_motors())
+
+    def on_takeoff_clicked(self):
+        self._flight_plan_step('Takeoff', lambda d: d.takeoff())
+
     def on_guide_clicked(self):
         self.operator_view.log_text('Take off and trajectory following started')
         # start each show with no residual avoidance deformation
@@ -344,6 +378,8 @@ class Application(QApplication):
         self.is_guiding = True
         self.operator_view.button_guide.setEnabled(False)
         self.operator_view.button_stop.setEnabled(True)
+        # a block jump would yank a drone out of the show: lock them out
+        self.operator_view.set_preflight_enabled(False)
 
     def on_stop_clicked(self):
         self.operator_view.log_text("Show stopped: NAV Mode ")
@@ -353,6 +389,7 @@ class Application(QApplication):
             self.fd.acs[ac_id].release()
         self.operator_view.button_guide.setEnabled(True)
         self.operator_view.button_stop.setEnabled(False)
+        self.operator_view.set_preflight_enabled(True)
 
     def on_change_scenario_clicked(self):
         preselect = 0

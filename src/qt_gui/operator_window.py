@@ -297,6 +297,25 @@ class OperatorWindow(QMainWindow):
         v = QVBoxLayout(group)
         v.setSpacing(8)
 
+        # pre-flight: run the motors/takeoff sequence from here instead
+        # of the GCS (ConOps target). Greyed out for host apps without
+        # the handlers, and while a show is flying.
+        preflight = QHBoxLayout()
+        preflight.setSpacing(8)
+        self.button_motors = QPushButton("Start motors")
+        self.button_takeoff = QPushButton("Take off")
+        self._preflight_supported = True
+        for btn, handler in ((self.button_motors, "on_motors_clicked"),
+                             (self.button_takeoff, "on_takeoff_clicked")):
+            h = getattr(self.app, handler, None)
+            if h is None:
+                self._preflight_supported = False
+                btn.setEnabled(False)
+            else:
+                btn.clicked.connect(h)
+            preflight.addWidget(btn)
+        v.addLayout(preflight)
+
         self.button_guide = QPushButton("LAUNCH SHOW")
         self.button_guide.setObjectName("primary")
         self.button_guide.setEnabled(False)
@@ -400,5 +419,12 @@ class OperatorWindow(QMainWindow):
     def _reset_controls(self):
         self.button_guide.setEnabled(False)
         self.button_stop.setEnabled(False)
+        self.set_preflight_enabled(True)
         self.progress.setValue(0)
         self._set_safety_state("Unverified", "warn")
+
+    def set_preflight_enabled(self, enabled):
+        if not self._preflight_supported:
+            enabled = False
+        self.button_motors.setEnabled(enabled)
+        self.button_takeoff.setEnabled(enabled)
