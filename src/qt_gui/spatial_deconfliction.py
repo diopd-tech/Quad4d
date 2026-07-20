@@ -43,7 +43,10 @@ class HoldWarpedDyn:
         if t_hold > 1e-6:
             pts.append(((0., 0.), (t_hold, t_hold)))
         pts.append(((t_hold, t_hold), (t_hold + wait, t_hold)))
-        pts.append(((t_hold + wait, t_hold), (self.duration, orig_dyn.duration)))
+        # no trailing ramp for an end-of-path hold (period equalization
+        # parks the drone at its endpoint): the segment would be empty
+        if t_hold < orig_dyn.duration - 1e-6:
+            pts.append(((t_hold + wait, t_hold), (self.duration, orig_dyn.duration)))
         segments = [p_t1d.AffOne(a, b) for a, b in pts]
         eps = min(eps, wait / 4., max(t_hold / 4., 1e-3))
         self.warp = p_t1d.SmoothedCompositeOne(segments, eps=eps)
@@ -154,32 +157,102 @@ def _first_conflict(trajs, safety_distance, dt):
     return None
 
 
-def resolve_conflicts_spatial(model, safety_distance=1.0, margin_t=1.0,
-                              dt=0.1, max_iter=10):
-    """Iteratively schedule away every conflict of the scenario.
-    Returns (ok, report_lines)."""
-    report = []
+def _schedulable(model, j, report):
+    """Get trajectory j, converting it to space-indexed if needed."""
+    traj = model.get_trajectory(j)
+    if _space_indexed_of(traj)[0] is None:
+        traj = make_space_indexed(traj)
+        model.set_trajectory(traj, j)
+        report.append(f'drone {j+1}: converted to space-indexed for scheduling')
+    return traj
+
+
+def _traj_pos(traj, t):
+    tt = t % traj.duration if traj.duration > 0 else t
+    return traj.get(tt)[:3, 0]
+
+
+def _standoff_time(trajs, i, j, t1, t2, safety_distance, standoff, resume_margin, dt):
+    """Walk back from the conflict start to the LATEST time at which
+    drone j can park so that its (frozen) position stays clear of drone
+    i's whole pass — i keeps moving while j waits. This puts the waiting
+    drone as close to the conflict as safety allows (visibly staged at
+    the gate, not back at its corner)."""
+    t_scan_end = t2 + resume_margin
+    for tb in np.arange(t1, -dt, -dt):
+        tb = max(tb, 0.)
+        pj = _traj_pos(trajs[j], tb)
+        clear = all(np.linalg.norm(pj - _traj_pos(trajs[i], tt)) >=
+                    safety_distance + standoff
+                    for tt in np.arange(tb, t_scan_end, dt))
+        if clear or tb <= 0.:
+            return tb
+    return 0.
+
+
+def _clear_conflicts(model, safety_distance, standoff, resume_margin,
+                     dt, max_iter, report):
     for _ in range(max_iter):
         trajs = [model.get_trajectory(i) for i in range(model.trajectory_nb())]
         c = _first_conflict(trajs, safety_distance, dt)
         if c is None:
-            return True, report
+            return True
         i, j, t1, t2 = c
-        t_hold = max(0., t1 - margin_t)
-        wait = (t2 - t1) + 2. * margin_t
-        traj_j = trajs[j]
-        if _space_indexed_of(traj_j)[0] is None:
-            # not natively space-indexed: swap in the equivalent
-            # schedulable version (identical motion, indexable timing)
-            traj_j = make_space_indexed(traj_j)
-            model.set_trajectory(traj_j, j)
-            report.append(f'drone {j+1}: converted to space-indexed for scheduling')
-        if not insert_hold(traj_j, t_hold, wait):
+        t_hold = _standoff_time(trajs, i, j, t1, t2, safety_distance,
+                                standoff, resume_margin, dt)
+        wait = (t2 - t_hold) + resume_margin
+        if not insert_hold(_schedulable(model, j, report), t_hold, wait):
             report.append(f'drone {j+1}: could not warp its time law')
-            return False, report
-        report.append(f'drone {j+1} pauses {wait:.1f}s on its path at '
-                      f't={t_hold:.1f}s (conflict with drone {i+1} '
-                      f'at {t1:.1f}-{t2:.1f}s)')
+            return False
+        d_park = min(np.linalg.norm(_traj_pos(trajs[j], t_hold) -
+                                    _traj_pos(trajs[i], tt))
+                     for tt in np.arange(t_hold, t2 + resume_margin, dt))
+        report.append(f'drone {j+1} waits {wait:.1f}s at t={t_hold:.1f}s, '
+                      f'parked {d_park:.2f}m from drone {i+1}\'s pass')
         logger.info(report[-1])
     report.append(f'still conflicting after {max_iter} holds, giving up')
-    return False, report
+    return False
+
+
+def _equalize_periods(model, report):
+    """Give every trajectory the same total duration by parking each
+    drone at its endpoint (= its start, paths are closed) until the
+    longest one finishes. The whole show then repeats identically at
+    every loop cycle — no phase drift, and the turn-taking order is
+    preserved (the leader waits for the others before going again)."""
+    n = model.trajectory_nb()
+    T = max(model.get_trajectory(i).duration for i in range(n))
+    changed = False
+    for j in range(n):
+        dur = model.get_trajectory(j).duration
+        wait = T - dur
+        if wait < 0.2:
+            continue
+        traj = _schedulable(model, j, report)
+        dur = traj.duration   # conversion preserves it, but reread to be safe
+        if insert_hold(traj, dur, T - dur):
+            report.append(f'drone {j+1} parks {T-dur:.1f}s at its start '
+                          f'to align the show period ({T:.1f}s)')
+            changed = True
+    return changed
+
+
+def resolve_conflicts_spatial(model, safety_distance=1.0, standoff=0.15,
+                              resume_margin=0.5, dt=0.1, max_iter=10):
+    """Schedule away every conflict (waiting drones parked as close to
+    the conflict as safety allows), then equalize all periods so the
+    show repeats identically cycle after cycle. Returns (ok, report)."""
+    report = []
+    for _round in range(3):
+        if not _clear_conflicts(model, safety_distance, standoff,
+                                resume_margin, dt, max_iter, report):
+            return False, report
+        # a parked drone can in principle create a new conflict near its
+        # parking spot, hence the outer re-check loop
+        if not _equalize_periods(model, report):
+            return True, report
+    trajs = [model.get_trajectory(i) for i in range(model.trajectory_nb())]
+    ok = _first_conflict(trajs, safety_distance, dt) is None
+    if not ok:
+        report.append('conflicts persist after period alignment')
+    return ok, report

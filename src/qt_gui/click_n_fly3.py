@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 # ever triggering. History: v1 used 0.1, v3 uses 0.15.
 DIST_TO_START_THRESHOLD = 0.3
 
+# --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
+SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
+SCHED_STANDOFF      = 0.15  # m, extra buffer over safety for the parked drone:
+                            # it waits as close to the conflict as safety+standoff
+                            # allows (staged at the gate, not back at its corner)
+SCHED_RESUME_MARGIN = 0.5   # s, extra wait after the other drone has cleared
+
 
 class MainWindow(QMainWindow):
     def __init__(self, model, ids, controller):
@@ -462,7 +469,9 @@ class Application(QApplication):
         the conflicts by pausing drones on their paths (lambda holds),
         then propagate the new durations to the flight director."""
         ok, report = sd.resolve_conflicts_spatial(self.model,
-                                                  safety_distance=safety_distance)
+                                                  safety_distance=SCHED_SAFETY_DIST,
+                                                  standoff=SCHED_STANDOFF,
+                                                  resume_margin=SCHED_RESUME_MARGIN)
         # holds stretch the trajectories: the show length must follow
         self.fd.duree_du_show = self.model.trajectory_duration()
         return ok, report
