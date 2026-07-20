@@ -428,11 +428,22 @@ class OperatorWindow(QMainWindow):
 
     def run_safety_check(self):
         self.log_text("Trajectory analysis in progress...")
-        # >>> MODIF (TEST repulsion) : NO delay-based resolution.
-        # Leave the planned conflicts in so they reach the controller and the
-        # reactive avoidance actually has something to push apart.
         conflicts = self.model.detect_conflicts(safety_distance=1.0)
-        if conflicts:
+        # apps can provide their own resolution strategy (e.g. click_n_fly3's
+        # lambda scheduling); without a hook, behavior is detection-only
+        hook = getattr(self.app, 'resolve_conflicts_hook', None)
+        if conflicts and hook is not None:
+            ok, report = hook(safety_distance=1.0)
+            for line in report:
+                self.log_text('  ' + line)
+            conflicts = self.model.detect_conflicts(safety_distance=1.0)
+            if ok and not conflicts:
+                self._set_safety_state("Deconflicted (on-path scheduling)", "ok")
+                self.log_text("Conflicts resolved: geometry untouched, timing reshaped.")
+            else:
+                self._set_safety_state(f"{len(conflicts)} conflict(s) REMAIN", "err")
+                self.log_text("Scheduling could not clear everything - do not launch.")
+        elif conflicts:
             self._set_safety_state(
                 f"{len(conflicts)} planned conflict(s) - reactive only", "warn")
             self.log_text(
@@ -441,7 +452,6 @@ class OperatorWindow(QMainWindow):
             self._set_safety_state("No planned conflict", "ok")
             self.log_text("0 conflict detected.")
         self.button_guide.setEnabled(True)
-        # self.model.resolve_conflicts(safety_distance=1.0, delay_increment=2.0)  # disabled for test
 
     def show_progress(self, value):
         self.progress.setValue(value)
