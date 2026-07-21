@@ -12,15 +12,6 @@ from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel, QSizePolicy,
                                QPushButton, QVBoxLayout, QHBoxLayout, QWidget)
 
 
-STATUS_COLOR = {
-    "UNKNOWN":   "#8B938F",
-    "CONNECTED": "#8B938F",
-    "READY":     "#8B938F",
-    "CRUISING":  "#C7D0CB",
-    "ARRIVED":   "#C7D0CB",
-}
-_DEFAULT_STATUS_COLOR = "#8B938F"
-
 
 _DEFAULT_COLORS = ["#1E78B3", "#FF800E", "#2BA02B"]
 
@@ -103,12 +94,11 @@ class _DroneRow(QFrame):
         self.lbl_traj.setStyleSheet(f"color:{_MUTED}; font-size:13px; border:none;")
         self.lbl_traj.setToolTip(traj_name)
 
-        self.lbl_status = QLabel()
-        self.lbl_status.setStyleSheet("font-size:13px; border:none;")
+        # header: id + trajectory + kill only (the show status was
+        # redundant with the flight mode shown on the state line below)
         top.addWidget(name)
         top.addWidget(self.lbl_traj)
         top.addStretch(1)
-        top.addWidget(self.lbl_status)
 
         # per-drone kill (last resort): compact, right in the row so it's
         # next to the drone it acts on. Two clicks within 3s (an accidental
@@ -131,29 +121,31 @@ class _DroneRow(QFrame):
         self.lbl_metrics = QLabel()
         self.lbl_metrics.setWordWrap(True)
         self.lbl_metrics.setStyleSheet(
-            f"color:{_MUTED}; font-size:13px; border:none;"
+            f"color:{_MUTED}; font-size:14px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_metrics)
 
+        # one state line: health dots (mocap/RC/link, labels in the
+        # tooltip) on the left, flight mode on the right
+        stateline = QHBoxLayout()
+        stateline.setSpacing(8)
         self.lbl_checklist = QLabel()
         self.lbl_checklist.setStyleSheet(
-            f"color:{_MUTED}; font-size:13px; border:none;"
-            " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
-        v.addWidget(self.lbl_checklist)
-
+            "font-size:15px; border:none; letter-spacing:2px;")
         self.lbl_nav = QLabel()
-        self.lbl_nav.setWordWrap(True)
         self.lbl_nav.setStyleSheet(
             f"color:{_MUTED}; font-size:13px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
-        v.addWidget(self.lbl_nav)
+        stateline.addWidget(self.lbl_checklist)
+        stateline.addStretch(1)
+        stateline.addWidget(self.lbl_nav)
+        v.addLayout(stateline)
 
-        self.set_status("UNKNOWN")
         self.set_values(None, None, None, None)
         self.set_checklist([("mocap", "unknown", "no EXTERNAL_POSE seen yet"),
                             ("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"),
                             ("link", "unknown", "no ROTORCRAFT_STATUS seen yet")])
-        self.set_nav("—")
+        self.set_nav("—", "")
 
 
     def _on_kill_pressed(self):
@@ -172,30 +164,26 @@ class _DroneRow(QFrame):
         self.button_kill.setText("KILL")
         self.button_kill.setStyleSheet(_KILL_IDLE)
 
-    def set_status(self, status_name):
-        col = STATUS_COLOR.get(status_name, _DEFAULT_STATUS_COLOR)
-        self.lbl_status.setText(status_name.replace("_", " ").title())
-        self.lbl_status.setStyleSheet(f"color:{col}; font-size:13px; border:none;")
-
-
     def set_traj_name(self, name):
         self.lbl_traj.setText(name)
         self.lbl_traj.setToolTip(name)
 
 
     def set_checklist(self, items):
-        """items: list of (label, state, detail) with state in _CHECK_COLORS."""
+        """items: list of (label, state, detail) with state in _CHECK_COLORS.
+        Shows coloured dots only; the labels/details live in the tooltip."""
         parts, tips = [], []
         for label, state, detail in items:
             col = _CHECK_COLORS.get(state, _MUTED)
-            parts.append(f'<span style="color:{col};">●</span> {label}')
+            parts.append(f'<span style="color:{col};">●</span>')
             tips.append(f"{label}: {detail}")
-        self.lbl_checklist.setText("  ".join(parts))
+        self.lbl_checklist.setText(" ".join(parts))
         self.lbl_checklist.setToolTip("\n".join(tips))
 
 
-    def set_nav(self, html):
+    def set_nav(self, html, tip=""):
         self.lbl_nav.setText(html)
+        self.lbl_nav.setToolTip(tip)
 
 
     def set_values(self, alt, spd, dist, batt=None):
@@ -305,16 +293,15 @@ class DronesPanel(QGroupBox):
 
     @staticmethod
     def _nav_html(ac, now):
-        """Flight plan / autopilot state line: what the GCS strip shows.
-        e.g.  NAV · Takeoff · motors ON · airborne"""
+        """Short flight state (mode · airborne) for the row, plus a full
+        tooltip (block, motors) for when it's needed. Returns (html, tip)."""
         # a silent drone must not keep showing its last known state
         # (pool-reused drones would display a stale "motors ON" forever)
         t_status = getattr(ac, "t_last_status", None)
         if t_status is None or now - t_status >= _STATUS_STALE_S:
-            return "—"
+            return "—", ""
 
         parts = []
-
         mode = getattr(ac, "ap_mode", None)
         if mode is None:
             parts.append("—")
@@ -327,24 +314,24 @@ class DronesPanel(QGroupBox):
             else:
                 parts.append(f'<span style="color:{_VALUE};">{name}</span>')
 
+        in_flight = getattr(ac, "ap_in_flight", None)
+        if in_flight is not None:
+            parts.append(f'<span style="color:{_VALUE};">airborne</span>'
+                         if in_flight else "on ground")
+        html = " · ".join(parts)
+
+        # tooltip: the detail kept off the main line (flight plan block, motors)
+        tip = []
         cur_block = getattr(ac, "cur_block", None)
         if cur_block is not None:
             names = getattr(getattr(ac, "blocks", None), "names", [])
             block = (names[cur_block] if 0 <= cur_block < len(names)
                      else f"block {cur_block}")
-            parts.append(f'<span style="color:{_VALUE};">{block}</span>')
-
+            tip.append(f"block: {block}")
         motors = getattr(ac, "ap_motors_on", None)
         if motors is not None:
-            parts.append(f'<span style="color:{_CHECK_COLORS["ok"]};">motors ON</span>'
-                         if motors else "motors off")
-
-        in_flight = getattr(ac, "ap_in_flight", None)
-        if in_flight is not None:
-            parts.append(f'<span style="color:{_VALUE};">airborne</span>'
-                         if in_flight else "on ground")
-
-        return " · ".join(parts)
+            tip.append("motors ON" if motors else "motors off")
+        return html, "  ·  ".join(tip)
 
     def set_traj_name(self, idx, name):
         if 0 <= idx < len(self.ids):
@@ -365,10 +352,9 @@ class DronesPanel(QGroupBox):
             if ac is None:
                 continue
 
-            row.set_status(getattr(ac.status, "name", "UNKNOWN"))
             batt = getattr(ac, "battery_v", None)
             row.set_checklist(self._checklist_items(ac, now))
-            row.set_nav(self._nav_html(ac, now))
+            row.set_nav(*self._nav_html(ac, now))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
                 row.set_values(None, None, None, batt)
