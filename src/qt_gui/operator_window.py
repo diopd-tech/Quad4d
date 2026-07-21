@@ -5,7 +5,6 @@ import logging
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox,
-                               QComboBox,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
 import view_three_d as vtd
@@ -352,26 +351,17 @@ class OperatorWindow(QMainWindow):
         else:
             self.button_land_all.clicked.connect(h)
 
-        # kill one drone (last resort): pick the id, then two clicks
-        # within 3s (an accidental kill drops a drone out of the sky)
-        kill_row = QHBoxLayout()
-        kill_row.setSpacing(8)
-        self.combo_kill = QComboBox()
-        self.button_kill = QPushButton("KILL")
-        # red is for the destructive action: a killed drone falls
-        self.button_kill.setStyleSheet(
-            "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
-        self._kill_armed = False
-        if getattr(self.app, "on_kill_clicked", None) is None:
-            self.button_kill.setEnabled(False)
-        else:
-            self.button_kill.clicked.connect(self._on_kill_pressed)
-        # changing the target disarms a pending confirmation
-        self.combo_kill.currentTextChanged.connect(lambda _t: self._disarm_kill())
-        kill_row.addWidget(QLabel("Drone:"))
-        kill_row.addWidget(self.combo_kill, 1)
-        kill_row.addWidget(self.button_kill)
-        self._refresh_kill_combo()
+        # kill (last resort): one button PER drone (operator request),
+        # each needs two clicks within 3s (an accidental kill drops a
+        # drone out of the sky)
+        self._kill_supported = getattr(self.app, "on_kill_clicked", None) is not None
+        self._kill_armed = {}      # ac_id -> bool
+        self._kill_buttons = {}    # ac_id -> QPushButton
+        self.kill_box = QWidget()
+        self.kill_row = QHBoxLayout(self.kill_box)
+        self.kill_row.setContentsMargins(0, 0, 0, 0)
+        self.kill_row.setSpacing(6)
+        self._rebuild_kill_buttons()
 
         self.progress = QProgressBar()
         self.progress.setValue(0)
@@ -379,33 +369,56 @@ class OperatorWindow(QMainWindow):
         v.addWidget(self.button_guide)
         v.addWidget(self.button_stop)
         v.addWidget(self.button_land_all)
-        v.addLayout(kill_row)
+        v.addWidget(self.kill_box)
         v.addWidget(self.progress)
         return group
 
-    def _refresh_kill_combo(self):
-        self.combo_kill.clear()
+    @staticmethod
+    def _kill_style(armed):
+        # red is for the destructive action; brighter when armed
+        return ("background-color:#F85149; color:#FFFFFF; font-weight:700;" if armed
+                else "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
+
+    def _rebuild_kill_buttons(self):
+        while self.kill_row.count():
+            w = self.kill_row.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        self._kill_buttons = {}
+        self._kill_armed = {}
+        self.kill_row.addWidget(QLabel("Kill:"))
         for _id in self.fd.ids:
-            self.combo_kill.addItem(str(_id))
+            btn = QPushButton(f"KILL {_id}")
+            btn.setStyleSheet(self._kill_style(False))
+            if self._kill_supported:
+                btn.clicked.connect(lambda _c=False, i=_id: self._on_kill_pressed(i))
+            else:
+                btn.setEnabled(False)
+            self._kill_armed[_id] = False
+            self._kill_buttons[_id] = btn
+            self.kill_row.addWidget(btn)
+        self.kill_row.addStretch(1)
 
-    def _on_kill_pressed(self):
-        if not self._kill_armed:
-            self._kill_armed = True
-            self.button_kill.setText(f"CONFIRM {self.combo_kill.currentText()}")
-            self.button_kill.setStyleSheet(
-                "background-color:#F85149; color:#FFFFFF; font-weight:700;")
-            QTimer.singleShot(3000, self._disarm_kill)
+    def _on_kill_pressed(self, ac_id):
+        btn = self._kill_buttons.get(ac_id)
+        if btn is None:
             return
-        ac_id = self.combo_kill.currentText()
-        self._disarm_kill()
-        if ac_id:
-            self.app.on_kill_clicked(int(ac_id))
+        if not self._kill_armed.get(ac_id):
+            self._kill_armed[ac_id] = True
+            btn.setText(f"CONFIRM {ac_id}")
+            btn.setStyleSheet(self._kill_style(True))
+            QTimer.singleShot(3000, lambda i=ac_id: self._disarm_kill(i))
+            return
+        self._disarm_kill(ac_id)
+        self.app.on_kill_clicked(int(ac_id))
 
-    def _disarm_kill(self):
-        self._kill_armed = False
-        self.button_kill.setText("KILL")
-        self.button_kill.setStyleSheet(
-            "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
+    def _disarm_kill(self, ac_id):
+        btn = self._kill_buttons.get(ac_id)
+        if btn is None:
+            return
+        self._kill_armed[ac_id] = False
+        btn.setText(f"KILL {ac_id}")
+        btn.setStyleSheet(self._kill_style(False))
 
     def _build_console_group(self):
         group = QGroupBox("PAPARAZZI TELEMETRY CONSOLE")
@@ -487,7 +500,7 @@ class OperatorWindow(QMainWindow):
         self._update_scenario_labels(scenario)
         self._refresh_chronograms()
         self.telemetry_recorder.reset(fd.ids)
-        self._refresh_kill_combo()
+        self._rebuild_kill_buttons()
         self._reset_controls()
 
     def _replace_drones_panel(self, ids, colors, trajs):
