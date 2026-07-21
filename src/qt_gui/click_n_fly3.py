@@ -38,6 +38,20 @@ logger = logging.getLogger(__name__)
 # ever triggering. History: v1 used 0.1, v3 uses 0.15.
 DIST_TO_START_THRESHOLD = 0.3
 
+# Fixed standby points (ENU, metres), one per scenario drone slot, spread
+# across the cage. Drones go here on "Go to standby" (staging after
+# takeoff) and when a show is stopped, giving a known, repeatable
+# formation instead of the flight-plan standby / hovering wherever they
+# happened to stop. Drones beyond this list fall back to their
+# trajectory start.
+STANDBY_POINTS = [
+    (-2.0, -2.0, 1.2),
+    ( 2.0, -2.0, 1.2),
+    ( 0.0,  2.5, 1.2),
+]
+STANDBY_AIRBORNE_ALT = 0.6   # m, altitude above which a drone counts as
+                             # climbed, so takeoff can hand over to Guided
+
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
 SCHED_STANDOFF      = 0.15  # m, extra buffer over safety for the parked drone:
@@ -91,6 +105,7 @@ class Drone:
         self.status = DroneStatus.UNKNOWN
         self.battery_v = None
         self.link_down = False   # True once an Ivy send has failed (bus gone)
+        self.standby_point = None   # fixed ENU staging point (None -> traj start)
         # pre-flight checklist inputs (see drones_panel)
         self.t_last_ext_pose = None  # last EXTERNAL_POSE seen (mocap uplink)
         self.t_last_status = None    # last ROTORCRAFT_STATUS (downlink alive)
@@ -149,6 +164,16 @@ class Drone:
     def set_ref(self, Tref, Yref): self.Tref, self.Yref = Tref, Yref
     def goto_ref(self):
         return self._send(lambda: self.guided.goto_enu(self.conf.id, *self.Yref[:,0]))
+    def goto_point(self, enu):
+        if self.status == DroneStatus.UNKNOWN:
+            return True
+        return self._send(lambda: self.guided.goto_enu(self.conf.id, *enu))
+    def go_standby(self):
+        """Fly to this drone's fixed standby point, or its trajectory
+        start if none is defined."""
+        if self.standby_point is not None:
+            return self.goto_point(self.standby_point)
+        return self.goto_ref()
     def follow_ref(self):
         Y = mu.Yenu2ned(self.Yref)
         return self._send(lambda: self.guided.set_full_ned(self.conf.id,
@@ -367,6 +392,7 @@ class Application(QApplication):
             self.model.load_from_factory(traj_name)
 
         self.fd = FlightDirector(self.model, ids)
+        self._assign_standby_points()
         self.window = MainWindow(self.model, ids, self)
         self.window.setWindowTitle("Click'n Fly 3 - Spectator view")
         self.window.show()
@@ -386,6 +412,14 @@ class Application(QApplication):
 
         self.is_guiding = False
 
+    def _assign_standby_points(self):
+        """Give each active drone its fixed standby point, by scenario
+        order. Drones beyond the configured list keep None (they fall
+        back to their trajectory start)."""
+        for i, ac_id in enumerate(self.fd.ids):
+            pt = STANDBY_POINTS[i] if i < len(STANDBY_POINTS) else None
+            self.fd.acs[ac_id].standby_point = pt
+
     def on_quit(self):
         if getattr(self, '_quitting', False):
             return
@@ -404,16 +438,36 @@ class Application(QApplication):
         else:
             self.operator_view.log_text(f'{label} sent to {len(self.fd.ids)} drone(s)')
 
-    def on_motors_clicked(self):
+    def on_prepare_clicked(self):
+        """Single staging button (operator request): start motors, then
+        take off, then move to the standby points once airborne. The
+        steps are sequenced from periodic() so each waits for the
+        previous one to take effect."""
+        self.operator_view.log_text('PREPARE: starting motors')
         self._flight_plan_step('Start motors', lambda d: d.start_motors())
+        self._prepare_state = 'motors'
+        self._prepare_t = time.time()
 
-    def on_takeoff_clicked(self):
-        self._flight_plan_step('Takeoff', lambda d: d.takeoff())
+    def _advance_prepare(self):
+        """Drive the PREPARE sequence from periodic(): motors -> takeoff,
+        then hand over to the takeoff->standby step."""
+        if getattr(self, '_prepare_state', None) != 'motors':
+            return
+        motors = [self.fd.acs[i].ap_motors_on for i in self.fd.ids]
+        all_on = bool(motors) and all(m == 1 for m in motors)
+        # proceed on confirmation, or on timeout if the field is absent
+        if all_on or (time.time() - self._prepare_t) > 4.0:
+            self._prepare_state = None
+            self.operator_view.log_text('PREPARE: taking off')
+            self._flight_plan_step('Takeoff', lambda d: d.takeoff())
+            self._pending_standby = True
 
     def on_land_all_clicked(self):
         """Emergency (or end-of-show) landing: stop guiding, hand every
         drone back to its flight plan on the land block."""
         self.operator_view.log_text('LAND ALL')
+        self._pending_standby = False
+        self._prepare_state = None
         self.is_guiding = False
         self.fd.status = FDStatus.FINISHED
         for ac_id in self.fd.ids:
@@ -436,6 +490,8 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
+        self._pending_standby = False  # launching now supersedes standby staging
+        self._prepare_state = None
         self.operator_view.log_text('Take off and trajectory following started')
         # arm Guided mode NOW, not at connect: before launch the drones
         # stay in NAV so the flight plan (start motors, takeoff blocks)
@@ -452,14 +508,17 @@ class Application(QApplication):
         self.operator_view.set_preflight_enabled(False)
 
     def on_stop_clicked(self):
-        # stay in Guided, hovering in place: the show can be relaunched,
-        # or LAND ALL used for a normal landing. NAV is only given back
-        # by LAND ALL (so the flight plan lands) or at app exit.
-        self.operator_view.log_text('Show stopped: holding position (Guided)')
+        # stay in Guided and return to the fixed standby points: a known,
+        # repeatable formation the show can be relaunched from, or LAND
+        # ALL used for a normal landing. NAV is only given back by LAND
+        # ALL (so the flight plan lands) or at app exit.
+        # NOTE testbed caveat: the straight-line returns to standby are
+        # not themselves deconflicted, watch them on the first runs.
+        self.operator_view.log_text('Show stopped: returning to standby (Guided)')
         self.is_guiding = False
         self.fd.status = FDStatus.FINISHED
         for ac_id in self.fd.ids:
-            self.fd.acs[ac_id].hold_position()
+            self.fd.acs[ac_id].go_standby()
         self.operator_view.button_guide.setEnabled(True)
         self.operator_view.button_stop.setEnabled(False)
         self.operator_view.set_preflight_enabled(True)
@@ -523,6 +582,7 @@ class Application(QApplication):
             drone.vehicle_traj = []
         self.fd.acs = new_acs
         self.fd.ids = ids
+        self._assign_standby_points()
         self.fd.trajectories = new_model
         self.fd.duree_du_show = new_model.trajectory_duration()
         self.fd.status = FDStatus.STAGING
@@ -550,6 +610,22 @@ class Application(QApplication):
             # moves are interesting to see in the live telemetry too
             self.operator_view.record_live_telemetry(self.fd)
             self.t0 += self.dt_control
+
+        # drive the PREPARE staging sequence (motors -> takeoff)
+        self._advance_prepare()
+
+        # takeoff -> standby: wait until every drone has actually climbed
+        # (altitude past the threshold), then arm Guided and send them to
+        # their fixed standby points. Fires once per takeoff.
+        if getattr(self, '_pending_standby', False):
+            airborne = [self.fd.acs[i].T[2, 3] > STANDBY_AIRBORNE_ALT
+                        for i in self.fd.ids]
+            if airborne and all(airborne):
+                self._pending_standby = False
+                for ac_id in self.fd.ids:
+                    self.fd.acs[ac_id].take_control()
+                    self.fd.acs[ac_id].go_standby()
+                self.operator_view.log_text('Airborne: moving to standby points')
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
             loop_elapsed = (time.time() - self.fd.t0) % self.fd.duree_du_show

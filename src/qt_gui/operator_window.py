@@ -307,18 +307,29 @@ class OperatorWindow(QMainWindow):
         # the handlers, and while a show is flying.
         preflight = QHBoxLayout()
         preflight.setSpacing(8)
-        self.button_motors = QPushButton("Start motors")
-        self.button_takeoff = QPushButton("Take off")
-        self._preflight_supported = True
-        for btn, handler in ((self.button_motors, "on_motors_clicked"),
-                             (self.button_takeoff, "on_takeoff_clicked")):
-            h = getattr(self.app, handler, None)
-            if h is None:
-                self._preflight_supported = False
-                btn.setEnabled(False)
-            else:
-                btn.clicked.connect(h)
+        self._preflight_buttons = []
+        prepare_h = getattr(self.app, "on_prepare_clicked", None)
+        if prepare_h is not None:
+            # single-button staging: motors + takeoff + go to standby
+            self._preflight_supported = True
+            btn = QPushButton("Take off")
+            btn.clicked.connect(prepare_h)
+            self._preflight_buttons.append(btn)
             preflight.addWidget(btn)
+        else:
+            self.button_motors = QPushButton("Start motors")
+            self.button_takeoff = QPushButton("Take off")
+            self._preflight_supported = True
+            for btn, handler in ((self.button_motors, "on_motors_clicked"),
+                                 (self.button_takeoff, "on_takeoff_clicked")):
+                h = getattr(self.app, handler, None)
+                if h is None:
+                    self._preflight_supported = False
+                    btn.setEnabled(False)
+                else:
+                    btn.clicked.connect(h)
+                self._preflight_buttons.append(btn)
+                preflight.addWidget(btn)
         v.addLayout(preflight)
 
         self.button_guide = QPushButton("LAUNCH SHOW")
@@ -498,5 +509,5 @@ class OperatorWindow(QMainWindow):
     def set_preflight_enabled(self, enabled):
         if not self._preflight_supported:
             enabled = False
-        self.button_motors.setEnabled(enabled)
-        self.button_takeoff.setEnabled(enabled)
+        for btn in self._preflight_buttons:
+            btn.setEnabled(enabled)
