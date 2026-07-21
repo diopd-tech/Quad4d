@@ -69,9 +69,9 @@ _SPEED_ALPHA = 0.3   # lissage de la vitesse estimee (0..1, plus haut = plus rea
 
 
 _KILL_IDLE  = ("background-color:#7A2B26; color:#FFEDEB; font-weight:700;"
-               " border:none; border-radius:4px; padding:1px 6px;")
+               " font-size:12px; border:none; border-radius:4px; padding:3px 10px;")
 _KILL_ARMED = ("background-color:#F85149; color:#FFFFFF; font-weight:700;"
-               " border:none; border-radius:4px; padding:1px 6px;")
+               " font-size:12px; border:none; border-radius:4px; padding:3px 10px;")
 
 
 class _DroneRow(QFrame):
@@ -87,24 +87,24 @@ class _DroneRow(QFrame):
             f" border-left:3px solid {color}; border-radius:5px; }}")
 
         v = QVBoxLayout(self)
-        v.setContentsMargins(7, 5, 7, 5)
-        v.setSpacing(2)
+        v.setContentsMargins(10, 8, 10, 8)
+        v.setSpacing(4)
 
 
         top = QHBoxLayout()
-        top.setSpacing(6)
+        top.setSpacing(8)
 
         name = QLabel(f"D{drone_id}")
-        name.setStyleSheet("color:#E8ECEA; font-size:12px; font-weight:600; border:none;")
+        name.setStyleSheet("color:#E8ECEA; font-size:15px; font-weight:600; border:none;")
 
         # trajectory name inline with the header: one line less per row,
         # so every drone stays fully visible in the fixed-height window
         self.lbl_traj = QLabel(traj_name)
-        self.lbl_traj.setStyleSheet(f"color:{_MUTED}; font-size:11px; border:none;")
+        self.lbl_traj.setStyleSheet(f"color:{_MUTED}; font-size:13px; border:none;")
         self.lbl_traj.setToolTip(traj_name)
 
         self.lbl_status = QLabel()
-        self.lbl_status.setStyleSheet("font-size:11px; border:none;")
+        self.lbl_status.setStyleSheet("font-size:13px; border:none;")
         top.addWidget(name)
         top.addWidget(self.lbl_traj)
         top.addStretch(1)
@@ -131,20 +131,20 @@ class _DroneRow(QFrame):
         self.lbl_metrics = QLabel()
         self.lbl_metrics.setWordWrap(True)
         self.lbl_metrics.setStyleSheet(
-            f"color:{_MUTED}; font-size:11px; border:none;"
+            f"color:{_MUTED}; font-size:13px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_metrics)
 
         self.lbl_checklist = QLabel()
         self.lbl_checklist.setStyleSheet(
-            f"color:{_MUTED}; font-size:11px; border:none;"
+            f"color:{_MUTED}; font-size:13px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_checklist)
 
         self.lbl_nav = QLabel()
         self.lbl_nav.setWordWrap(True)
         self.lbl_nav.setStyleSheet(
-            f"color:{_MUTED}; font-size:11px; border:none;"
+            f"color:{_MUTED}; font-size:13px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_nav)
 
@@ -175,7 +175,7 @@ class _DroneRow(QFrame):
     def set_status(self, status_name):
         col = STATUS_COLOR.get(status_name, _DEFAULT_STATUS_COLOR)
         self.lbl_status.setText(status_name.replace("_", " ").title())
-        self.lbl_status.setStyleSheet(f"color:{col}; font-size:11px; border:none;")
+        self.lbl_status.setStyleSheet(f"color:{col}; font-size:13px; border:none;")
 
 
     def set_traj_name(self, name):
@@ -232,10 +232,10 @@ class DronesPanel(QGroupBox):
 
         header = QHBoxLayout()
         title = QLabel("DRONES")
-        title.setStyleSheet("color:#6E7770; font-size:9px; letter-spacing:1.5px; border:none;")
+        title.setStyleSheet("color:#6E7770; font-size:11px; letter-spacing:1.5px; border:none;")
         self.lbl_flight_time = QLabel()
         self.lbl_flight_time.setStyleSheet(
-            "color:#8B938F; font-size:10px; border:none;"
+            "color:#8B938F; font-size:12px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         header.addWidget(title)
         header.addStretch(1)
@@ -251,7 +251,7 @@ class DronesPanel(QGroupBox):
         rows_box.setStyleSheet("background:transparent; border:none;")
         rows_lay = QVBoxLayout(rows_box)
         rows_lay.setContentsMargins(0, 0, 0, 0)
-        rows_lay.setSpacing(5)
+        rows_lay.setSpacing(8)
         for i, _id in enumerate(self.ids):
             color = self.colors[i % len(self.colors)]
             tname = trajs[i] if i < len(trajs) else ""

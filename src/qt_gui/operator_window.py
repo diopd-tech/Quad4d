@@ -172,20 +172,20 @@ class OperatorWindow(QMainWindow):
 
         self.drones_panel = DronesPanel(self.fd.ids, colors, trajs,
                                         kill_cbk=self._kill_cbk())
-        # the panel is exactly as tall as its drones (no scroll area:
-        # a hidden drone is not acceptable); leftover column space
-        # stays below the control groups
+        # scenario + drones at the top; safety + flight controls pinned to
+        # the bottom, with the leftover space between them. With 2 drones a
+        # gap shows, with 3 it shrinks - never 4 (the fleet is 3 max).
         panels.addWidget(self.drones_panel)
+        panels.addStretch(1)
         panels.addWidget(self._build_safety_group())
         panels.addWidget(self._build_controls_group())
-        panels.addStretch(1)
 
         right = QWidget()
         right.setMinimumWidth(380)  # enough for an unwrapped nav line
         # cap the width too: the control column stays a fixed-ish strip so
         # long trajectory names or the per-row kill button never grow it
         # and squeeze the 3D view (operator request)
-        right.setMaximumWidth(460)
+        right.setMaximumWidth(520)
         right.setLayout(panels)
         body.addWidget(right, stretch=0)
 
