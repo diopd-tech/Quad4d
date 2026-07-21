@@ -4,12 +4,46 @@
 #
 # Read-only "Drones" panel for the Click'n Fly operator window.
 #
+import os
 import time
 import numpy as np
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel, QSizePolicy,
                                QPushButton, QVBoxLayout, QHBoxLayout, QWidget)
+
+
+_ICON_SIZE = 20
+# Paparazzi GCS strip icons (vendored SVGs under media/pprz_icons, from
+# github.com/paparazzi/PprzGCS, GPL). Health indicator -> icon base name;
+# gps (the satellite) stands for the position source, i.e. the mocap.
+_ICON_DIR = os.path.join(os.path.dirname(__file__), 'media', 'pprz_icons')
+_ICON_BASE = {"mocap": "gps", "RC": "rc", "link": "link"}
+_STATE_SUFFIX = {"ok": "ok", "warn": "warning", "bad": "nok", "unknown": "nok"}
+_icon_cache = {}
+
+def _state_icon(kind, state, size=_ICON_SIZE):
+    """Render the pprz strip icon for a health indicator, picked by state
+    (ok green / warning amber / nok red; unknown = faint)."""
+    key = (kind, state, size)
+    pm = _icon_cache.get(key)
+    if pm is not None:
+        return pm
+    base = _ICON_BASE.get(kind, "link")
+    path = os.path.join(_ICON_DIR, f"{base}_{_STATE_SUFFIX.get(state, 'nok')}.svg")
+    if not os.path.exists(path):          # rc/gps have no _warning variant
+        path = os.path.join(_ICON_DIR, f"{base}_nok.svg")
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    if state == "unknown":
+        p.setOpacity(0.35)                # not heard from yet: dim it
+    QSvgRenderer(path).render(p)
+    p.end()
+    _icon_cache[key] = pm
+    return pm
 
 
 
@@ -119,25 +153,27 @@ class _DroneRow(QFrame):
 
 
         self.lbl_metrics = QLabel()
-        self.lbl_metrics.setWordWrap(True)
+        self.lbl_metrics.setWordWrap(False)   # keep it on a single line
         self.lbl_metrics.setStyleSheet(
             f"color:{_MUTED}; font-size:14px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
         v.addWidget(self.lbl_metrics)
 
-        # one state line: health dots (mocap/RC/link, labels in the
+        # one state line: health icons (mocap/RC/link, detail in the
         # tooltip) on the left, flight mode on the right
         stateline = QHBoxLayout()
         stateline.setSpacing(8)
-        self.lbl_checklist = QLabel()
-        self.lbl_checklist.setStyleSheet(
-            "font-size:15px; border:none; letter-spacing:2px;")
+        self._icons = {}
+        for kind in ("mocap", "RC", "link"):
+            lab = QLabel()
+            lab.setFixedSize(_ICON_SIZE, _ICON_SIZE)
+            self._icons[kind] = lab
+            stateline.addWidget(lab)
+        stateline.addStretch(1)
         self.lbl_nav = QLabel()
         self.lbl_nav.setStyleSheet(
             f"color:{_MUTED}; font-size:13px; border:none;"
             " font-family:'DejaVu Sans Mono','Menlo','Consolas',monospace;")
-        stateline.addWidget(self.lbl_checklist)
-        stateline.addStretch(1)
         stateline.addWidget(self.lbl_nav)
         v.addLayout(stateline)
 
@@ -171,14 +207,14 @@ class _DroneRow(QFrame):
 
     def set_checklist(self, items):
         """items: list of (label, state, detail) with state in _CHECK_COLORS.
-        Shows coloured dots only; the labels/details live in the tooltip."""
-        parts, tips = [], []
+        Draws a state-coloured icon per item; the detail lives in the
+        per-icon tooltip."""
         for label, state, detail in items:
-            col = _CHECK_COLORS.get(state, _MUTED)
-            parts.append(f'<span style="color:{col};">●</span>')
-            tips.append(f"{label}: {detail}")
-        self.lbl_checklist.setText(" ".join(parts))
-        self.lbl_checklist.setToolTip("\n".join(tips))
+            icon = self._icons.get(label)
+            if icon is None:
+                continue
+            icon.setPixmap(_state_icon(label, state))
+            icon.setToolTip(f"{label}: {detail}")
 
 
     def set_nav(self, html, tip=""):

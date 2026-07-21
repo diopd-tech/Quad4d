@@ -18,6 +18,11 @@ STYLE = """
 
     QWidget#root { background-color: #131715; }
 
+    QToolTip {
+        color: #E8ECEA; background-color: #232925;
+        border: 1px solid #353D38; padding: 4px 6px; font-size: 12px;
+    }
+
     QLabel { color: #E8ECEA; font-size: 13px; }
     QLabel#appTitle    { color: #FFFFFF; font-size: 18px; font-weight: 600; }
     QLabel#appSubtitle { color: #8B938F; font-size: 11px; }
@@ -201,7 +206,7 @@ class OperatorWindow(QMainWindow):
         # cap the width too: the control column stays a fixed-ish strip so
         # long trajectory names or the per-row kill button never grow it
         # and squeeze the 3D view (operator request)
-        right.setMaximumWidth(520)
+        right.setMaximumWidth(550)
         right.setLayout(panels)
         body.addWidget(right, stretch=0)
 
