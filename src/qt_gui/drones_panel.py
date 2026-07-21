@@ -167,6 +167,9 @@ class _DroneRow(QFrame):
         for kind in ("mocap", "RC", "link"):
             lab = QLabel()
             lab.setFixedSize(_ICON_SIZE, _ICON_SIZE)
+            # QLabel is a QFrame, so without this it inherits the row's
+            # coloured left border (the stray blue bar next to each icon)
+            lab.setStyleSheet("border:none;")
             self._icons[kind] = lab
             stateline.addWidget(lab)
         stateline.addStretch(1)
