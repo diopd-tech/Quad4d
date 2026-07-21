@@ -60,8 +60,8 @@ _ARMING_NAMES = ("NO_RC", "WAITING", "ARMING", "ARMED", "DISARMING",
 
 PANEL_STYLE = """
 QGroupBox#dronesPanel {
-    background-color: #1B201D; border: 1px solid #2A312D;
-    border-radius: 6px; margin-top: 0px; padding: 7px;
+    background: transparent; border: none;
+    margin-top: 0px; padding: 0px;
 }
 """
 

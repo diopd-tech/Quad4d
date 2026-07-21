@@ -2,7 +2,7 @@
 
 
 import logging
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox,
                                QGridLayout,
@@ -20,28 +20,29 @@ STYLE = """
 
     QLabel { color: #E8ECEA; font-size: 13px; }
     QLabel#appTitle    { color: #FFFFFF; font-size: 18px; font-weight: 600; }
-    QLabel#appSubtitle { color: #8B938F; font-size: 11px; }
     QLabel#scenName    { color: #E8ECEA; font-size: 13px; font-weight: 600; }
     QLabel#scenInfo    { color: #8B938F; font-size: 11px; }
 
+    /* flat sections: no card box, the title is just a small header and
+       spacing/tint separates sections (operator asked to drop the boxes) */
     QGroupBox {
-        background-color: #1B201D;
-        border: 1px solid #2A312D;
-        border-radius: 6px;
-        margin-top: 10px;
-        padding: 10px;
+        background: transparent;
+        border: none;
+        margin-top: 16px;
+        padding: 0px;
         font-size: 11px;
         font-weight: 600;
+        letter-spacing: 1px;
         color: #6E7770;
     }
     QGroupBox::title {
         subcontrol-origin: margin;
         subcontrol-position: top left;
-        left: 10px;
-        padding: 2px 6px;
+        left: 2px;
+        padding: 0px 0px 3px 0px;
         color: #6E7770;
     }
-    QGroupBox#compact { margin-top: 8px; padding: 8px; }
+    QGroupBox#compact { margin-top: 13px; }
 
     QPushButton {
         background-color: #232925;
@@ -86,7 +87,7 @@ STYLE = """
 
     QPlainTextEdit {
         background-color: #0E110F; color: #C7D0CB;
-        border: 1px solid #2A312D; border-radius: 6px;
+        border: none; border-radius: 4px;
         font-family: "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
         font-size: 12px; padding: 6px;
     }
@@ -163,7 +164,6 @@ class OperatorWindow(QMainWindow):
         # right: column of panels
         panels = QVBoxLayout()
         panels.setSpacing(10)
-        panels.addWidget(self._build_scenario_group())
         colors = ['#%02X%02X%02X' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
                   for c in vtd.TrajItem._colors]
 
@@ -239,34 +239,30 @@ class OperatorWindow(QMainWindow):
         event.accept()
 
     def _build_header(self):
+        # app title on the left, scenario info inline on the right: no
+        # separate "show configuration" box, saves vertical space
         box = QWidget()
-        v = QVBoxLayout(box)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(2)
+        h = QHBoxLayout(box)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(12)
         title = QLabel("CLICK'N FLY")
         title.setObjectName("appTitle")
-        subtitle = QLabel("Operator Control Center")
-        subtitle.setObjectName("appSubtitle")
-        v.addWidget(title)
-        v.addWidget(subtitle)
-        return box
+        h.addWidget(title)
+        h.addStretch(1)
 
-    def _build_scenario_group(self):
-        group = QGroupBox("SHOW CONFIGURATION")
-        group.setObjectName("compact")
-        v = QVBoxLayout(group)
-        v.setSpacing(2)
-
+        scen_col = QVBoxLayout()
+        scen_col.setSpacing(0)
         self.label_scen = QLabel()
         self.label_scen.setObjectName("scenName")
-
+        self.label_scen.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.label_scen_info = QLabel()
         self.label_scen_info.setObjectName("scenInfo")
-
-        v.addWidget(self.label_scen)
-        v.addWidget(self.label_scen_info)
+        self.label_scen_info.setAlignment(Qt.AlignmentFlag.AlignRight)
+        scen_col.addWidget(self.label_scen)
+        scen_col.addWidget(self.label_scen_info)
+        h.addLayout(scen_col)
         self._update_scenario_labels(getattr(self.app, "scenario", None))
-        return group
+        return box
 
     def _update_scenario_labels(self, scen):
         if scen is not None:
@@ -282,23 +278,17 @@ class OperatorWindow(QMainWindow):
             f"{', '.join(str(i) for i in ids) if ids else '-'}")
 
     def _build_safety_group(self):
+        # one short row: button + status side by side, so the section
+        # stays compact
         group = QGroupBox("SAFETY CHECK")
-        v = QVBoxLayout(group)
-        v.setSpacing(10)
-
-        self.btn_check_safety = QPushButton("Trajectory analysis "
-                                            "& collision avoidance")
-        self.btn_check_safety.clicked.connect(self.run_safety_check)
-
-        row = QHBoxLayout()
+        group.setObjectName("compact")
+        row = QHBoxLayout(group)
         row.setSpacing(8)
-        row.addWidget(QLabel("Status:"))
+        self.btn_check_safety = QPushButton("Analyze")
+        self.btn_check_safety.clicked.connect(self.run_safety_check)
         self.label_safety_status = QLabel("Unverified")
-        row.addWidget(self.label_safety_status)
-        row.addStretch(1)
-
-        v.addWidget(self.btn_check_safety)
-        v.addLayout(row)
+        row.addWidget(self.btn_check_safety)
+        row.addWidget(self.label_safety_status, 1)
         return group
 
     def _build_controls_group(self):
