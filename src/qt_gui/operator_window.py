@@ -5,6 +5,7 @@ import logging
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox,
+                               QGridLayout,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
 import view_three_d as vtd
@@ -169,7 +170,8 @@ class OperatorWindow(QMainWindow):
         trajs = [self.model.get_trajectory(i).name
                  for i in range(self.model.trajectory_nb())]
 
-        self.drones_panel = DronesPanel(self.fd.ids, colors, trajs)
+        self.drones_panel = DronesPanel(self.fd.ids, colors, trajs,
+                                        kill_cbk=self._kill_cbk())
         # the panel is exactly as tall as its drones (no scroll area:
         # a hidden drone is not acceptable); leftover column space
         # stays below the control groups
@@ -180,8 +182,12 @@ class OperatorWindow(QMainWindow):
 
         right = QWidget()
         right.setMinimumWidth(380)  # enough for an unwrapped nav line
+        # cap the width too: the control column stays a fixed-ish strip so
+        # long trajectory names or the per-row kill button never grow it
+        # and squeeze the 3D view (operator request)
+        right.setMaximumWidth(460)
         right.setLayout(panels)
-        body.addWidget(right, stretch=1)
+        body.addWidget(right, stretch=0)
 
         outer.addLayout(body, stretch=1)
 
@@ -304,8 +310,6 @@ class OperatorWindow(QMainWindow):
         # pre-flight: run the motors/takeoff sequence from here instead
         # of the GCS (ConOps target). Greyed out for host apps without
         # the handlers, and while a show is flying.
-        preflight = QHBoxLayout()
-        preflight.setSpacing(8)
         self._preflight_buttons = []
         prepare_h = getattr(self.app, "on_prepare_clicked", None)
         if prepare_h is not None:
@@ -314,7 +318,6 @@ class OperatorWindow(QMainWindow):
             btn = QPushButton("Take off")
             btn.clicked.connect(prepare_h)
             self._preflight_buttons.append(btn)
-            preflight.addWidget(btn)
         else:
             self.button_motors = QPushButton("Start motors")
             self.button_takeoff = QPushButton("Take off")
@@ -328,8 +331,6 @@ class OperatorWindow(QMainWindow):
                 else:
                     btn.clicked.connect(h)
                 self._preflight_buttons.append(btn)
-                preflight.addWidget(btn)
-        v.addLayout(preflight)
 
         self.button_guide = QPushButton("LAUNCH SHOW")
         self.button_guide.setObjectName("primary")
@@ -351,74 +352,36 @@ class OperatorWindow(QMainWindow):
         else:
             self.button_land_all.clicked.connect(h)
 
-        # kill (last resort): one button PER drone (operator request),
-        # each needs two clicks within 3s (an accidental kill drops a
-        # drone out of the sky)
-        self._kill_supported = getattr(self.app, "on_kill_clicked", None) is not None
-        self._kill_armed = {}      # ac_id -> bool
-        self._kill_buttons = {}    # ac_id -> QPushButton
-        self.kill_box = QWidget()
-        self.kill_row = QHBoxLayout(self.kill_box)
-        self.kill_row.setContentsMargins(0, 0, 0, 0)
-        self.kill_row.setSpacing(6)
-        self._rebuild_kill_buttons()
-
         self.progress = QProgressBar()
         self.progress.setValue(0)
 
-        v.addWidget(self.button_guide)
-        v.addWidget(self.button_stop)
-        v.addWidget(self.button_land_all)
-        v.addWidget(self.kill_box)
+        # paired layout instead of a tall stack (kill moved into the
+        # drones panel). Single-preflight apps (click_n_fly3) get the
+        # exact pairing the operator asked for:
+        #   take off | launch          motors | take off
+        #   stop     | land     or     launch | stop        (2-preflight)
+        #                               land (full width)
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        if len(self._preflight_buttons) == 1:
+            grid.addWidget(self._preflight_buttons[0], 0, 0)
+            grid.addWidget(self.button_guide,          0, 1)
+            grid.addWidget(self.button_stop,           1, 0)
+            grid.addWidget(self.button_land_all,       1, 1)
+        else:
+            grid.addWidget(self._preflight_buttons[0], 0, 0)
+            grid.addWidget(self._preflight_buttons[1], 0, 1)
+            grid.addWidget(self.button_guide,          1, 0)
+            grid.addWidget(self.button_stop,           1, 1)
+            grid.addWidget(self.button_land_all,       2, 0, 1, 2)
+        v.addLayout(grid)
         v.addWidget(self.progress)
         return group
 
-    @staticmethod
-    def _kill_style(armed):
-        # red is for the destructive action; brighter when armed
-        return ("background-color:#F85149; color:#FFFFFF; font-weight:700;" if armed
-                else "background-color:#7A2B26; color:#FFEDEB; font-weight:700;")
-
-    def _rebuild_kill_buttons(self):
-        while self.kill_row.count():
-            w = self.kill_row.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
-        self._kill_buttons = {}
-        self._kill_armed = {}
-        self.kill_row.addWidget(QLabel("Kill:"))
-        for _id in self.fd.ids:
-            btn = QPushButton(f"KILL {_id}")
-            btn.setStyleSheet(self._kill_style(False))
-            if self._kill_supported:
-                btn.clicked.connect(lambda _c=False, i=_id: self._on_kill_pressed(i))
-            else:
-                btn.setEnabled(False)
-            self._kill_armed[_id] = False
-            self._kill_buttons[_id] = btn
-            self.kill_row.addWidget(btn)
-        self.kill_row.addStretch(1)
-
-    def _on_kill_pressed(self, ac_id):
-        btn = self._kill_buttons.get(ac_id)
-        if btn is None:
-            return
-        if not self._kill_armed.get(ac_id):
-            self._kill_armed[ac_id] = True
-            btn.setText(f"CONFIRM {ac_id}")
-            btn.setStyleSheet(self._kill_style(True))
-            QTimer.singleShot(3000, lambda i=ac_id: self._disarm_kill(i))
-            return
-        self._disarm_kill(ac_id)
-        self.app.on_kill_clicked(int(ac_id))
-
-    def _disarm_kill(self, ac_id):
-        btn = self._kill_buttons.get(ac_id)
-        if btn is None:
-            return
-        self._kill_armed[ac_id] = False
-        btn.setText(f"KILL {ac_id}")
-        btn.setStyleSheet(self._kill_style(False))
+    def _kill_cbk(self):
+        """Callback the drones panel wires to each row's kill button;
+        None if the host app has no kill handler (button greyed out)."""
+        return getattr(self.app, "on_kill_clicked", None)
 
     def _build_console_group(self):
         group = QGroupBox("PAPARAZZI TELEMETRY CONSOLE")
@@ -500,14 +463,15 @@ class OperatorWindow(QMainWindow):
         self._update_scenario_labels(scenario)
         self._refresh_chronograms()
         self.telemetry_recorder.reset(fd.ids)
-        self._rebuild_kill_buttons()
+        # kill buttons live in the drones panel now, rebuilt with it in
+        # _replace_drones_panel
         self._reset_controls()
 
     def _replace_drones_panel(self, ids, colors, trajs):
         layout = self.drones_panel.parentWidget().layout()
         idx = layout.indexOf(self.drones_panel)
         old_panel = self.drones_panel
-        self.drones_panel = DronesPanel(ids, colors, trajs)
+        self.drones_panel = DronesPanel(ids, colors, trajs, kill_cbk=self._kill_cbk())
         layout.insertWidget(idx, self.drones_panel)
         layout.removeWidget(old_panel)
         old_panel.deleteLater()

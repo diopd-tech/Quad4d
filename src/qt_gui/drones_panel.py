@@ -7,8 +7,9 @@
 import time
 import numpy as np
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QGroupBox, QFrame, QLabel, QSizePolicy,
-                               QVBoxLayout, QHBoxLayout, QWidget)
+                               QPushButton, QVBoxLayout, QHBoxLayout, QWidget)
 
 
 STATUS_COLOR = {
@@ -67,11 +68,20 @@ QGroupBox#dronesPanel {
 _SPEED_ALPHA = 0.3   # lissage de la vitesse estimee (0..1, plus haut = plus reactif)
 
 
+_KILL_IDLE  = ("background-color:#7A2B26; color:#FFEDEB; font-weight:700;"
+               " border:none; border-radius:4px; padding:1px 6px;")
+_KILL_ARMED = ("background-color:#F85149; color:#FFFFFF; font-weight:700;"
+               " border:none; border-radius:4px; padding:1px 6px;")
+
+
 class _DroneRow(QFrame):
 
-    def __init__(self, drone_id, color, traj_name=""):
+    def __init__(self, drone_id, color, traj_name="", kill_cbk=None):
         super().__init__()
-       
+        self.drone_id = drone_id
+        self._kill_cbk = kill_cbk
+        self._kill_armed = False
+
         self.setStyleSheet(
             "QFrame { background:#202622; border:1px solid #2A312D;"
             f" border-left:3px solid {color}; border-radius:5px; }}")
@@ -80,7 +90,7 @@ class _DroneRow(QFrame):
         v.setContentsMargins(7, 5, 7, 5)
         v.setSpacing(2)
 
-       
+
         top = QHBoxLayout()
         top.setSpacing(6)
 
@@ -99,6 +109,18 @@ class _DroneRow(QFrame):
         top.addWidget(self.lbl_traj)
         top.addStretch(1)
         top.addWidget(self.lbl_status)
+
+        # per-drone kill (last resort): compact, right in the row so it's
+        # next to the drone it acts on. Two clicks within 3s (an accidental
+        # kill drops a drone out of the sky).
+        self.button_kill = QPushButton("KILL")
+        self.button_kill.setStyleSheet(_KILL_IDLE)
+        self.button_kill.setToolTip(f"Cut motors of drone {drone_id} (it falls)")
+        if kill_cbk is None:
+            self.button_kill.setEnabled(False)
+        else:
+            self.button_kill.clicked.connect(self._on_kill_pressed)
+        top.addWidget(self.button_kill)
         v.addLayout(top)
 
         # never let the column layout squash the row below its natural
@@ -133,6 +155,22 @@ class _DroneRow(QFrame):
                             ("link", "unknown", "no ROTORCRAFT_STATUS seen yet")])
         self.set_nav("—")
 
+
+    def _on_kill_pressed(self):
+        if not self._kill_armed:
+            self._kill_armed = True
+            self.button_kill.setText("CONFIRM")
+            self.button_kill.setStyleSheet(_KILL_ARMED)
+            QTimer.singleShot(3000, self._disarm_kill)
+            return
+        self._disarm_kill()
+        if self._kill_cbk is not None:
+            self._kill_cbk(self.drone_id)
+
+    def _disarm_kill(self):
+        self._kill_armed = False
+        self.button_kill.setText("KILL")
+        self.button_kill.setStyleSheet(_KILL_IDLE)
 
     def set_status(self, status_name):
         col = STATUS_COLOR.get(status_name, _DEFAULT_STATUS_COLOR)
@@ -179,13 +217,14 @@ class _DroneRow(QFrame):
 
 
 class DronesPanel(QGroupBox):
-    def __init__(self, ids, colors=None, trajs=None):
-        super().__init__()                    
+    def __init__(self, ids, colors=None, trajs=None, kill_cbk=None):
+        super().__init__()
         self.setObjectName("dronesPanel")
         self.setStyleSheet(PANEL_STYLE)
         self.ids = list(ids)
         self.colors = list(colors) if colors else list(_DEFAULT_COLORS)
-        trajs = list(trajs) if trajs else []     
+        self._kill_cbk = kill_cbk
+        trajs = list(trajs) if trajs else []
 
         v = QVBoxLayout(self)
         v.setContentsMargins(2, 2, 2, 2)
@@ -216,7 +255,7 @@ class DronesPanel(QGroupBox):
         for i, _id in enumerate(self.ids):
             color = self.colors[i % len(self.colors)]
             tname = trajs[i] if i < len(trajs) else ""
-            row = _DroneRow(_id, color, tname)
+            row = _DroneRow(_id, color, tname, kill_cbk=kill_cbk)
             self.rows[_id] = row
             rows_lay.addWidget(row)
         v.addWidget(rows_box)
