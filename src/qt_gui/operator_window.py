@@ -202,11 +202,10 @@ class OperatorWindow(QMainWindow):
         panels.addWidget(self._build_controls_group())
 
         right = QWidget()
-        right.setMinimumWidth(380)  # enough for an unwrapped nav line
-        # cap the width too: the control column stays a fixed-ish strip so
-        # long trajectory names or the per-row kill button never grow it
-        # and squeeze the 3D view (operator request)
-        right.setMaximumWidth(550)
+        # FIXED width (not a min/max range): otherwise the column resized as
+        # the metrics line changed digit count (e.g. speed 2 -> 2.1 -> 12.3),
+        # making the whole panel visibly jitter (operator request)
+        right.setFixedWidth(480)
         right.setLayout(panels)
         body.addWidget(right, stretch=0)
 
