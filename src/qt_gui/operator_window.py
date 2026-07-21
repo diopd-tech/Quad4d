@@ -2,9 +2,9 @@
 
 
 import logging
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
-                               QProgressBar, QPlainTextEdit, QGroupBox,
+                               QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
                                QGridLayout,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
@@ -20,6 +20,7 @@ STYLE = """
 
     QLabel { color: #E8ECEA; font-size: 13px; }
     QLabel#appTitle    { color: #FFFFFF; font-size: 18px; font-weight: 600; }
+    QLabel#appSubtitle { color: #8B938F; font-size: 11px; }
     QLabel#scenName    { color: #E8ECEA; font-size: 13px; font-weight: 600; }
     QLabel#scenInfo    { color: #8B938F; font-size: 11px; }
 
@@ -57,6 +58,16 @@ STYLE = """
     QPushButton:pressed { background-color: #1C211E; }
     QPushButton:disabled {
         background-color: #1A1F1C; color: #565E59; border: 1px solid #262C28;
+    }
+
+    /* header menu buttons (Scenario / View): subtle, not action buttons */
+    QPushButton#menuBtn {
+        background: transparent; border: none; color: #C7D0CB;
+        padding: 4px 8px; font-size: 12px; font-weight: 500;
+    }
+    QPushButton#menuBtn:hover { background-color: #232925; }
+    QPushButton#menuBtn::menu-indicator {
+        subcontrol-position: right center; width: 10px;
     }
 
     /* Primary button: launch the show */
@@ -112,8 +123,12 @@ class OperatorWindow(QMainWindow):
         self.setWindowTitle("Click'n Fly - Operator Control Center")
         self.resize(1200, 840)
 
-        scen_menu = self.menuBar().addMenu("Scenario")
-        change_scen_action = scen_menu.addAction("Change scenario...")
+        # menus live in the header (buttons next to the title), not in a
+        # native menu bar, to save the whole menu-bar row
+        self.menuBar().hide()
+
+        self.scen_menu = QMenu(self)
+        change_scen_action = self.scen_menu.addAction("Change scenario...")
         change_scen_action.triggered.connect(self.app.on_change_scenario_clicked)
 
         # Chronograms: reuse the editor's plot widgets. They show the planned
@@ -125,9 +140,9 @@ class OperatorWindow(QMainWindow):
             'full_state_chrono': (view_chrono.FullStateChronogram, 'Full state chronogram'),
             'output_chrono': (view_chrono.OutputChronogram, 'Output chronogram'),
         }
-        view_menu = self.menuBar().addMenu("View")
+        self.view_menu = QMenu(self)
         for key, (_cls, title) in self._chrono_specs.items():
-            act = view_menu.addAction(title)
+            act = self.view_menu.addAction(title)
             act.setCheckable(True)
             act.toggled.connect(lambda checked, k=key: self._toggle_chronogram(k, checked))
 
@@ -135,8 +150,8 @@ class OperatorWindow(QMainWindow):
         # the window is opened on demand with the history already there
         self.telemetry_recorder = TelemetryRecorder(self.fd.ids)
         self._live_telemetry_win = None
-        view_menu.addSeparator()
-        live_act = view_menu.addAction("Live telemetry")
+        self.view_menu.addSeparator()
+        live_act = self.view_menu.addAction("Live telemetry")
         live_act.triggered.connect(self._show_live_telemetry)
 
         root = QWidget()
@@ -164,6 +179,7 @@ class OperatorWindow(QMainWindow):
         # right: column of panels
         panels = QVBoxLayout()
         panels.setSpacing(10)
+        panels.addWidget(self._build_scenario_group())
         colors = ['#%02X%02X%02X' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
                   for c in vtd.TrajItem._colors]
 
@@ -239,30 +255,50 @@ class OperatorWindow(QMainWindow):
         event.accept()
 
     def _build_header(self):
-        # app title on the left, scenario info inline on the right: no
-        # separate "show configuration" box, saves vertical space
+        # title + subtitle on the left, and the Scenario / View menus as
+        # buttons right next to them (replacing the native menu-bar row)
         box = QWidget()
         h = QHBoxLayout(box)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(12)
+
+        titles = QVBoxLayout()
+        titles.setSpacing(2)
         title = QLabel("CLICK'N FLY")
         title.setObjectName("appTitle")
-        h.addWidget(title)
-        h.addStretch(1)
+        subtitle = QLabel("Operator Control Center")
+        subtitle.setObjectName("appSubtitle")
+        titles.addWidget(title)
+        titles.addWidget(subtitle)
+        h.addLayout(titles)
 
-        scen_col = QVBoxLayout()
-        scen_col.setSpacing(0)
+        self.btn_scen_menu = QPushButton("Scenario")
+        self.btn_scen_menu.setObjectName("menuBtn")
+        self.btn_scen_menu.setMenu(self.scen_menu)
+        self.btn_view_menu = QPushButton("View")
+        self.btn_view_menu.setObjectName("menuBtn")
+        self.btn_view_menu.setMenu(self.view_menu)
+        h.addWidget(self.btn_scen_menu)
+        h.addWidget(self.btn_view_menu)
+        h.addStretch(1)
+        return box
+
+    def _build_scenario_group(self):
+        group = QGroupBox("SHOW CONFIGURATION")
+        group.setObjectName("compact")
+        v = QVBoxLayout(group)
+        v.setSpacing(2)
+
         self.label_scen = QLabel()
         self.label_scen.setObjectName("scenName")
-        self.label_scen.setAlignment(Qt.AlignmentFlag.AlignRight)
+
         self.label_scen_info = QLabel()
         self.label_scen_info.setObjectName("scenInfo")
-        self.label_scen_info.setAlignment(Qt.AlignmentFlag.AlignRight)
-        scen_col.addWidget(self.label_scen)
-        scen_col.addWidget(self.label_scen_info)
-        h.addLayout(scen_col)
+
+        v.addWidget(self.label_scen)
+        v.addWidget(self.label_scen_info)
         self._update_scenario_labels(getattr(self.app, "scenario", None))
-        return box
+        return group
 
     def _update_scenario_labels(self, scen):
         if scen is not None:
