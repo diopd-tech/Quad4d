@@ -193,7 +193,7 @@ class _DroneRow(QFrame):
         stateline.addWidget(self.lbl_nav)
         v.addLayout(stateline)
 
-        self.set_values(None, None, None, None)
+        self.set_values(None, None, None)
         self.set_checklist([("mocap", "unknown", "no EXTERNAL_POSE seen yet"),
                             ("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"),
                             ("link", "unknown", "no ROTORCRAFT_STATUS seen yet"),
@@ -239,7 +239,7 @@ class _DroneRow(QFrame):
         self.lbl_nav.setToolTip(tip)
 
 
-    def set_values(self, alt, spd, dist, batt=None):
+    def set_values(self, alt, spd, batt=None):
         def cell(label, value, unit, fmt, color=_VALUE, bold=False):
             v = (fmt % value + unit) if value is not None else "\u2014"
             weight = "font-weight:700;" if bold else ""
@@ -253,7 +253,6 @@ class _DroneRow(QFrame):
         self.lbl_metrics.setText(
             cell("alt", alt, "m", "%.2f") + "   "
             + cell("spd", spd, "m/s", "%.1f") + "   "
-            + cell("dist", dist, "m", "%.2f") + "   "
             + cell("batt", batt, "V", "%.1f", batt_color, batt_bold))
 
 
@@ -421,13 +420,12 @@ class DronesPanel(QGroupBox):
             row.set_nav(*self._nav_html(ac, now))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
-                row.set_values(None, None, None, batt)
+                row.set_values(None, None, batt)
                 self._prev.pop(_id, None)
                 continue
 
             pos = np.asarray(ac.T[:3, 3], dtype=float)
-            alt = pos[2]                           
-            dist = ac.dist_to_ref()
+            alt = pos[2]
 
             # vitesse: derivee numerique lissee de la position (estimation)
             v_est = self._speed.get(_id, 0.0)
@@ -440,4 +438,4 @@ class DronesPanel(QGroupBox):
                     self._speed[_id] = v_est
             self._prev[_id] = (pos, now)
 
-            row.set_values(alt, v_est, dist, batt)
+            row.set_values(alt, v_est, batt)

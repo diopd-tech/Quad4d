@@ -17,9 +17,10 @@ know from the GCS.
 | `link_ok/nok/warning` | telemetry downlink       |
 | `battery_ok/warning/nok` | pack voltage (see below)  |
 
-The `battery_*` icons are **not** from PprzGCS: they are drawn for this
-project (original work) in the same flat style and colour palette
-(green `#00d700`, amber `#e8a000`, red `#d70900`) so they sit next to
-the vendored ones. `ok` = full, `warning` = low (plan to land), `nok` =
-critical (land now); the voltage thresholds live in `drones_panel.py`
-(`battery_state`).
+The `battery_*` files are the PprzGCS battery icons, renamed to this
+project's `base_state` convention so they load through the same code
+path as the others: `battery_ok` = `bat_ok` (green, full), `warning` =
+`bat_low` (yellow, plan to land), `nok` = `bat_catastrophic` (red, land
+now). PprzGCS also ships `bat_critic` (orange) between low and
+catastrophic, unused here since the panel has three states. The voltage
+thresholds live in `drones_panel.py` (`battery_state`).
