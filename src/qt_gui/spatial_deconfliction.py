@@ -214,7 +214,9 @@ def _clear_conflicts(model, safety_distance, standoff, resume_margin,
         report.append(f'drone {j+1} waits {wait:.1f}s at t={t_hold:.1f}s, '
                       f'parked {d_park:.2f}m from drone {i+1}\'s pass')
         logger.info(report[-1])
-    report.append(f'still conflicting after {max_iter} holds, giving up')
+    report.append(f'still conflicting after {max_iter} holds, giving up '
+                  f'(raise max_iter if the holds were still making progress, '
+                  f'else the geometry is not schedulable in priority order)')
     return False
 
 
@@ -242,7 +244,7 @@ def _equalize_periods(model, report):
 
 
 def resolve_conflicts_spatial(model, safety_distance=1.0, standoff=0.15,
-                              resume_margin=0.5, dt=0.1, max_iter=10):
+                              resume_margin=0.5, dt=0.1, max_iter=30):
     """Schedule away every conflict (waiting drones parked as close to
     the conflict as safety allows), then equalize all periods so the
     show repeats identically cycle after cycle. Returns (ok, report)."""
