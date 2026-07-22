@@ -51,6 +51,9 @@ STANDBY_POINTS = [
 ]
 STANDBY_AIRBORNE_ALT = 0.4   # m, fallback altitude for "airborne" when the
                              # ap_in_flight flag isn't available
+GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
+                             # used to confirm the mode switch landed before
+                             # sending a guided goto (else it is dropped)
 
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
@@ -468,13 +471,13 @@ class Application(QApplication):
             self._prepare_state = None
             self.operator_view.log_text('PREPARE: taking off')
             self._flight_plan_step('Takeoff', lambda d: d.takeoff())
-            self._pending_standby = True
+            self._standby_state = 'airborne'  # -> arm Guided -> goto standby
 
     def on_land_all_clicked(self):
         """Emergency (or end-of-show) landing: stop guiding, hand every
         drone back to its flight plan on the land block."""
         self.operator_view.log_text('LAND ALL')
-        self._pending_standby = False
+        self._standby_state = None
         self._prepare_state = None
         self.is_guiding = False
         self.fd.status = FDStatus.FINISHED
@@ -498,7 +501,7 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
-        self._pending_standby = False  # launching now supersedes standby staging
+        self._standby_state = None  # launching now supersedes standby staging
         self._prepare_state = None
         self.operator_view.log_text('Take off and trajectory following started')
         # arm Guided mode NOW, not at connect: before launch the drones
@@ -622,17 +625,31 @@ class Application(QApplication):
         # drive the PREPARE staging sequence (motors -> takeoff)
         self._advance_prepare()
 
-        # takeoff -> standby: wait until every drone is actually airborne,
-        # then arm Guided and send them to their fixed standby points.
-        # Fires once per takeoff.
-        if getattr(self, '_pending_standby', False):
+        # takeoff -> standby, in two steps so the guided goto isn't dropped:
+        #   1. 'airborne': wait until every drone is actually airborne, then
+        #      arm Guided (the auto2='Guided' mode switch).
+        #   2. 'guided': wait until the autopilot has really switched to
+        #      GUIDED before sending the goto. A goto sent while still in NAV
+        #      is silently ignored by the autopilot -- that race was why it
+        #      took a second Take off press. A short timeout backs up the
+        #      ap_mode check in case that field never reports GUIDED.
+        state = getattr(self, '_standby_state', None)
+        if state == 'airborne':
             airborne = [self._drone_airborne(self.fd.acs[i]) for i in self.fd.ids]
             if airborne and all(airborne):
-                self._pending_standby = False
                 for ac_id in self.fd.ids:
-                    self.fd.acs[ac_id].take_control()
+                    self.fd.acs[ac_id].take_control()  # switch to Guided
+                self._standby_state = 'guided'
+                self._standby_t = now
+                self.operator_view.log_text('Airborne: arming Guided for standby')
+        elif state == 'guided':
+            in_guided = all(getattr(self.fd.acs[i], 'ap_mode', None) == GUIDED_AP_MODE
+                            for i in self.fd.ids)
+            if in_guided or (now - self._standby_t) > 2.0:
+                for ac_id in self.fd.ids:
                     self.fd.acs[ac_id].go_standby()
-                self.operator_view.log_text('Airborne: moving to standby points')
+                self._standby_state = None
+                self.operator_view.log_text('Guided: moving to standby points')
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
             loop_elapsed = (time.time() - self.fd.t0) % self.fd.duree_du_show
