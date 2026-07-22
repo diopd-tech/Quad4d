@@ -200,16 +200,11 @@ def _clear_conflicts(model, safety_distance, standoff, resume_margin,
         i, j, t1, t2 = c
         t_hold = _standoff_time(trajs, i, j, t1, t2, safety_distance,
                                 standoff, resume_margin, dt)
-        # resume as soon as drone i has actually left j's parked spot, not
-        # at the blunt conflict-window end t2: i clears the frozen position
-        # well before t2, so keying the wait on t2 makes j (and the third
-        # drone especially, which stacks two waits) sit idle far too long.
-        pj = _traj_pos(trajs[j], t_hold)
-        t_clear = t_hold
-        for tt in np.arange(t_hold, t2 + resume_margin, dt):
-            if np.linalg.norm(pj - _traj_pos(trajs[i], tt)) < safety_distance + standoff:
-                t_clear = tt + dt
-        wait = (t_clear - t_hold) + resume_margin
+        # resume only once the moving-vs-moving conflict window has fully
+        # passed (t2): j resumes forward motion into the conflict zone, so
+        # keying the wait on when i merely leaves j's *parked* spot lets j
+        # catch up to i -- a collision. This over-waits a little (safe).
+        wait = (t2 - t_hold) + resume_margin
         if not insert_hold(_schedulable(model, j, report), t_hold, wait):
             report.append(f'drone {j+1}: could not warp its time law')
             return False
