@@ -38,7 +38,7 @@ class FlightPlanBlocks:
             with urllib.request.urlopen(conf.flight_plan) as f:
                 tree = ET.parse(f)
             self.names = [b.get('name', '') for b in tree.iter('block')]
-            logger.info(f'aircraft {conf.id}: flight plan blocks {self.names}')
+            logger.debug(f'aircraft {conf.id}: flight plan blocks {self.names}')
         except Exception as e:
             logger.warning(f'aircraft {conf.id}: cannot read flight plan '
                            f'{conf.flight_plan} ({e}); block jumps disabled')

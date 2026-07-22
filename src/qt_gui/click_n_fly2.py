@@ -38,11 +38,10 @@ class MainWindow(QMainWindow):
         self.resize(1280,900)
         self.tdw = vtd.ThreeDWidget()
         for i in range(len(ids)):
-            # spectator view: show only the real drone. Hide the reference
-            # path and the reference ("ghost") quad so the choreography
-            # isn't revealed to the audience in advance
+            # spectator view: the real drone plus its reference ("ghost")
+            # trajectory path; the ghost quad stays hidden
             self.tdw.display_new_trajectory(model, i, show_details=False, show_quad=True,
-                                            show_ref_quad=False, show_ref_traj=False)
+                                            show_ref_quad=False, show_ref_traj=True)
         self.setCentralWidget(self.tdw)
 
     def set_quad_pose(self, T, i): self.tdw.set_quad_pose(T, i)
@@ -502,7 +501,7 @@ class Application(QApplication):
         self.model = new_model
         self.window.tdw.set_trajectories(new_model, show_details=False,
                                          show_quad=True, show_ref_quad=False,
-                                         show_ref_traj=False)  # spectator: real drone only
+                                         show_ref_traj=True)  # spectator: real drone + ghost trajectory
         self.operator_view.load_show(new_model, self.fd, scenario)
 
         name = getattr(scenario, "name", None) or scenario.__class__.__name__
