@@ -16,8 +16,33 @@ import traj_factory
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH = os.path.join(os.path.dirname(__file__), 'data', 'custom_scenarios.yaml')
+RECENT_PATH = os.path.join(os.path.dirname(__file__), 'data', 'recent_scenarios.yaml')
+RECENT_MAX = 3            # how many recently-launched scenarios to keep
 
 _DEFAULT_FIRST_ID = 112   # the lab fleet numbering starts here
+
+
+def load_recent_names(path=RECENT_PATH):
+    """The names of the last few launched scenarios, most recent first."""
+    try:
+        with open(path) as f:
+            names = yaml.safe_load(f) or []
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        logger.warning(f'recent scenarios file unreadable, ignoring it: {e}')
+        return []
+    return [str(n) for n in names][:RECENT_MAX]
+
+
+def save_recent_name(name, path=RECENT_PATH, max_n=RECENT_MAX):
+    """Record a scenario as just launched (dedup, most recent first)."""
+    names = [n for n in load_recent_names(path) if n != name]
+    names.insert(0, str(name))
+    names = names[:max_n]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        yaml.safe_dump(names, f, allow_unicode=True, sort_keys=False)
 
 
 def load_custom_scenarios(path=DEFAULT_PATH):

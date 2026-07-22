@@ -2,6 +2,7 @@
 
 import logging
 from custom_scenarios import (load_custom_scenarios, save_custom_scenario,
+                              load_recent_names, save_recent_name,
                               CustomScenarioDialog)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -95,13 +96,19 @@ class ScenarioPickerDialog(QDialog):
         body.setSpacing(10)
 
         self.list = QListWidget()
-        # grouped for practicability: conflict-free shows first, then the
-        # deconfliction testbeds, then the operator's saved custom ones
+        # grouped for practicability: the last launched shows first (quick
+        # re-run), then conflict-free shows, the deconfliction testbeds, and
+        # the operator's saved custom ones
+        customs = load_custom_scenarios()
+        by_name = {c.__name__: c for c in predefined}
+        for c in customs:
+            by_name.setdefault(c.__name__, c)   # customs don't shadow predefined
+        recent = [by_name[n] for n in load_recent_names() if n in by_name]
         no_conflict = [c for c in predefined if not getattr(c, "conflict", False)]
         conflict    = [c for c in predefined if getattr(c, "conflict", False)]
+        self._add_group("RECENT", recent)
         self._add_group("NO CONFLICT", no_conflict)
         self._add_group("WITH CONFLICT", conflict)
-        customs = load_custom_scenarios()
         self._add_group("CUSTOM", customs)
         self._custom_header_added = bool(customs)
         self.list.setMinimumWidth(300)
@@ -217,6 +224,7 @@ class ScenarioPickerDialog(QDialog):
 
     def get_scenario(self):
         cls = self._row_scenario[self.list.currentRow()]
+        save_recent_name(cls.__name__)   # remember it for the RECENT group
         ids = [spin.value() for spin in self._id_spins]
         return ScenarioResult(
             name=cls.__name__,
