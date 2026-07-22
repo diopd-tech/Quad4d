@@ -189,13 +189,8 @@ _WITH_CONFLICT = [
     Scenario5,    # two back-and-forth (head-on)
     Scenario9,    # mixed: back-and-forth, gate race, circle
     Scenario10,   # mixed: oval, figure-of-eight, gate race
-    Scenario12,   # race track and slalom
     Scenario14,   # two figure-of-eight (cross at centre)
-    Scenario17,   # rotating triangle (rosette through centre)
     Scenario24,   # three-way convergence
-    Scenario25,   # ascending spiral, 3 drones
-    Scenario26,   # spiral, 2 drones
-    Scenario27,   # true ascending spiral, 3 drones
 ]
 
 for _c in scenarios:
