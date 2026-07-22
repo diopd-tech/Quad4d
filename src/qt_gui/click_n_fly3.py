@@ -27,6 +27,7 @@ from settings import PprzSettingsManager
 from guided_mode import GuidedMode
 from operator_window import OperatorWindow
 from scenario_picker import ScenarioPickerDialog
+from drones_panel import battery_state
 import flight_blocks as fb
 import spatial_deconfliction as sd
 
@@ -501,6 +502,19 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
+        # battery gate (operator safety): refuse to start on a pack already
+        # low enough to need landing before the show would end. A show that
+        # begins near the land-soon threshold will run critical mid-flight.
+        low = [(str(_id), self.fd.acs[_id].battery_v)
+               for _id in self.fd.ids
+               if battery_state(getattr(self.fd.acs[_id], 'battery_v', None))
+               in ('warn', 'bad')]
+        if low:
+            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in low)
+            self.operator_view.log_text(
+                f'START BLOCKED: battery too low on drone(s) {detail} '
+                f'- swap the pack(s) before launching')
+            return
         self._standby_state = None  # launching now supersedes standby staging
         self._prepare_state = None
         self.operator_view.log_text('Take off and trajectory following started')
@@ -650,6 +664,22 @@ class Application(QApplication):
                     self.fd.acs[ac_id].go_standby()
                 self._standby_state = None
                 self.operator_view.log_text('Guided: moving to standby points')
+
+        # critical-battery auto-land (operator safety): a pack below the
+        # land-now threshold cannot be trusted to keep flying. Fire once
+        # per critical event for any airborne drone; LAND ALL hands every
+        # drone back to its flight plan to land. Re-arms once the criticals
+        # clear (packs swapped / drones on the ground).
+        crit = [str(_id) for _id in self.fd.ids
+                if self._drone_airborne(self.fd.acs[_id])
+                and battery_state(getattr(self.fd.acs[_id], 'battery_v', None)) == 'bad']
+        if crit and not getattr(self, '_batt_landing', False):
+            self._batt_landing = True
+            self.operator_view.log_text(
+                f'CRITICAL BATTERY on drone(s) {", ".join(crit)} - AUTO LANDING')
+            self.on_land_all_clicked()
+        elif not crit:
+            self._batt_landing = False
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
             loop_elapsed = (time.time() - self.fd.t0) % self.fd.duree_du_show

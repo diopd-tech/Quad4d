@@ -20,7 +20,7 @@ _ICON_SIZE = 20
 # github.com/paparazzi/PprzGCS, GPL). Health indicator -> icon base name;
 # gps (the satellite) stands for the position source, i.e. the mocap.
 _ICON_DIR = os.path.join(os.path.dirname(__file__), 'media', 'pprz_icons')
-_ICON_BASE = {"mocap": "gps", "RC": "rc", "link": "link"}
+_ICON_BASE = {"mocap": "gps", "RC": "rc", "link": "link", "battery": "battery"}
 _STATE_SUFFIX = {"ok": "ok", "warn": "warning", "bad": "nok", "unknown": "nok"}
 _icon_cache = {}
 
@@ -58,6 +58,19 @@ _BATT_LOW_V  = 3.5 * _BATT_CELLS   # 10.5V: plan to land
 _BATT_CRIT_V = 3.3 * _BATT_CELLS   # 9.9V: land now
 _BATT_LOW_COLOR  = "#F2A33C"
 _BATT_CRIT_COLOR = "#F85149"       # same red as the HMI error state
+
+
+def battery_state(v):
+    """Classify a pack voltage into the health states used by both the
+    panel icon and the flight logic (start gate / auto-stop). Single
+    source of truth for the battery thresholds."""
+    if v is None:
+        return "unknown"
+    if v < _BATT_CRIT_V:
+        return "bad"
+    if v < _BATT_LOW_V:
+        return "warn"
+    return "ok"
 
 # --- Pre-flight checklist -----------------------------------------------
 # The GCS "green icons", brought into the operator's window (ConOps §4):
@@ -164,7 +177,7 @@ class _DroneRow(QFrame):
         stateline = QHBoxLayout()
         stateline.setSpacing(8)
         self._icons = {}
-        for kind in ("mocap", "RC", "link"):
+        for kind in ("mocap", "RC", "link", "battery"):
             lab = QLabel()
             lab.setFixedSize(_ICON_SIZE, _ICON_SIZE)
             # QLabel is a QFrame, so without this it inherits the row's
@@ -183,7 +196,8 @@ class _DroneRow(QFrame):
         self.set_values(None, None, None, None)
         self.set_checklist([("mocap", "unknown", "no EXTERNAL_POSE seen yet"),
                             ("RC", "unknown", "no ROTORCRAFT_STATUS seen yet"),
-                            ("link", "unknown", "no ROTORCRAFT_STATUS seen yet")])
+                            ("link", "unknown", "no ROTORCRAFT_STATUS seen yet"),
+                            ("battery", "unknown", "no ROTORCRAFT_STATUS seen yet")])
         self.set_nav("—", "")
 
 
@@ -327,6 +341,17 @@ class DronesPanel(QGroupBox):
             items.append(("link", "ok", "telemetry alive"))
         else:
             items.append(("link", "bad", f"telemetry lost {now - t_status:.0f}s ago"))
+
+        # battery: pack voltage against the land-soon / land-now thresholds
+        v = getattr(ac, "battery_v", None)
+        bstate = battery_state(v)
+        if bstate == "unknown":
+            items.append(("battery", "unknown", "no ROTORCRAFT_STATUS seen yet"))
+        else:
+            detail = {"ok": f"{v:.1f}V ok",
+                      "warn": f"{v:.1f}V low (< {_BATT_LOW_V:.1f}V): plan to land",
+                      "bad": f"{v:.1f}V CRITICAL (< {_BATT_CRIT_V:.1f}V): land now"}[bstate]
+            items.append(("battery", bstate, detail))
 
         return items
 
