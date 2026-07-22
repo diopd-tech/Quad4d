@@ -658,13 +658,31 @@ class Application(QApplication):
                 self._standby_t = now
                 self.operator_view.log_text('Airborne: arming Guided for standby')
         elif state == 'guided':
+            # send the standby goto ONLY once the autopilot confirms GUIDED:
+            # a goto sent while still in NAV is dropped, which would leave
+            # the drone on the flight-plan standby instead of ours. A
+            # re-launch after LAND (which handed the drone back to NAV)
+            # sometimes needs a second auto2=Guided to take, so keep nudging
+            # the mode switch while we wait instead of firing a blind goto.
             in_guided = all(getattr(self.fd.acs[i], 'ap_mode', None) == GUIDED_AP_MODE
                             for i in self.fd.ids)
-            if in_guided or (now - self._standby_t) > 2.0:
+            if in_guided:
                 for ac_id in self.fd.ids:
                     self.fd.acs[ac_id].go_standby()
                 self._standby_state = None
-                self.operator_view.log_text('Guided: moving to standby points')
+                self.operator_view.log_text('Guided confirmed: moving to standby points')
+            elif (now - self._standby_t) > 6.0:
+                # last resort: re-arm and send anyway rather than hang
+                for ac_id in self.fd.ids:
+                    self.fd.acs[ac_id].take_control()
+                    self.fd.acs[ac_id].go_standby()
+                self._standby_state = None
+                self.operator_view.log_text(
+                    'WARNING: GUIDED not confirmed after 6s; sent standby anyway')
+            elif now - getattr(self, '_standby_rearm_t', 0.) > 0.5:
+                self._standby_rearm_t = now
+                for ac_id in self.fd.ids:
+                    self.fd.acs[ac_id].take_control()  # nudge the mode switch
 
         # critical-battery auto-land (operator safety): a pack below the
         # land-now threshold cannot be trusted to keep flying. Fire once
