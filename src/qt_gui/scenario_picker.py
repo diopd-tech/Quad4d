@@ -3,9 +3,11 @@
 import logging
 from custom_scenarios import (load_custom_scenarios, save_custom_scenario,
                               CustomScenarioDialog)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QDialog, QWidget, QLabel, QPushButton, QSpinBox,
-                               QVBoxLayout, QHBoxLayout, QListWidget, QGroupBox,
-                               QScrollArea)
+                               QVBoxLayout, QHBoxLayout, QListWidget,
+                               QListWidgetItem, QGroupBox, QScrollArea)
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +74,11 @@ class ScenarioPickerDialog(QDialog):
 
     def __init__(self, scenarios, preselect=0, parent=None):
         super().__init__(parent)
-        # predefined scenarios + the operator's saved custom ones
-        self.scenarios = list(scenarios) + load_custom_scenarios()
+        predefined = list(scenarios)
         self._id_spins = []
+        # per list-row lookup: the scenario class, or None for a group
+        # header row (headers are non-selectable dividers)
+        self._row_scenario = []
 
         self.setWindowTitle("Click'n Fly - Select scenario")
         self.resize(720, 440)
@@ -91,8 +95,15 @@ class ScenarioPickerDialog(QDialog):
         body.setSpacing(10)
 
         self.list = QListWidget()
-        for cls in self.scenarios:
-            self.list.addItem(self._label(cls))
+        # grouped for practicability: conflict-free shows first, then the
+        # deconfliction testbeds, then the operator's saved custom ones
+        no_conflict = [c for c in predefined if not getattr(c, "conflict", False)]
+        conflict    = [c for c in predefined if getattr(c, "conflict", False)]
+        self._add_group("NO CONFLICT", no_conflict)
+        self._add_group("WITH CONFLICT", conflict)
+        customs = load_custom_scenarios()
+        self._add_group("CUSTOM", customs)
+        self._custom_header_added = bool(customs)
         self.list.setMinimumWidth(300)
         self.list.currentRowChanged.connect(self._on_selection_changed)
         body.addWidget(self.list, stretch=1)
@@ -124,8 +135,34 @@ class ScenarioPickerDialog(QDialog):
 
         self.setStyleSheet(STYLE)
 
-        preselect = preselect if 0 <= preselect < len(self.scenarios) else 0
-        self.list.setCurrentRow(preselect)
+        # preselect is an index into the scenarios passed in; map it to the
+        # grouped list and fall back to the first selectable row
+        target = predefined[preselect] if 0 <= preselect < len(predefined) else None
+        self._select_scenario(target)
+
+    def _add_header(self, text):
+        item = QListWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)      # a divider, not selectable
+        f = item.font(); f.setBold(True); item.setFont(f)
+        item.setForeground(QColor("#6E7770"))
+        self.list.addItem(item)
+        self._row_scenario.append(None)
+
+    def _add_group(self, title, items):
+        if not items:
+            return
+        self._add_header(title)
+        for cls in items:
+            self.list.addItem(self._label(cls))
+            self._row_scenario.append(cls)
+
+    def _select_scenario(self, cls):
+        """Select the row for a scenario class, else the first selectable row."""
+        row = self._row_scenario.index(cls) if cls in self._row_scenario else -1
+        if row < 0:
+            row = next((i for i, c in enumerate(self._row_scenario) if c is not None), -1)
+        if row >= 0:
+            self.list.setCurrentRow(row)
 
     @staticmethod
     def _label(cls):
@@ -143,9 +180,12 @@ class ScenarioPickerDialog(QDialog):
         name, desc, ids, trajs = dlg.result_scenario
         save_custom_scenario(name, desc, ids, trajs)
         cls = type(str(name), (), {'desc': desc, 'ids': ids, 'trajs': trajs})
-        self.scenarios.append(cls)
+        if not self._custom_header_added:
+            self._add_header("CUSTOM")
+            self._custom_header_added = True
         self.list.addItem(self._label(cls))
-        self.list.setCurrentRow(len(self.scenarios) - 1)
+        self._row_scenario.append(cls)
+        self.list.setCurrentRow(self.list.count() - 1)
 
     def _on_selection_changed(self, row):
         while self.detail_layout.count():
@@ -157,7 +197,9 @@ class ScenarioPickerDialog(QDialog):
 
         if row < 0:
             return
-        cls = self.scenarios[row]
+        cls = self._row_scenario[row]
+        if cls is None:                 # a group header, nothing to show
+            return
         for _id, traj in zip(cls.ids, cls.trajs):
             row_box = QHBoxLayout()
             spin = QSpinBox()
@@ -176,7 +218,7 @@ class ScenarioPickerDialog(QDialog):
         self.detail_layout.addStretch(1)
 
     def get_scenario(self):
-        cls = self.scenarios[self.list.currentRow()]
+        cls = self._row_scenario[self.list.currentRow()]
         ids = [spin.value() for spin in self._id_spins]
         return ScenarioResult(
             name=cls.__name__,
