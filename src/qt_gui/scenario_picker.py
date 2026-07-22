@@ -166,12 +166,10 @@ class ScenarioPickerDialog(QDialog):
 
     @staticmethod
     def _label(cls):
-        label = cls.__name__
-        desc = getattr(cls, "desc", None)
-        if desc:
-            label += f" — {desc}"
-        label += f"   ({len(cls.ids)} drone(s))"
-        return label
+        # the descriptive name is enough; drop the "ScenarioN" prefix
+        name = getattr(cls, "desc", None) or cls.__name__
+        name = name[:1].upper() + name[1:]
+        return f"{name}   ({len(cls.ids)} drone(s))"
 
     def _on_new_custom(self):
         dlg = CustomScenarioDialog(self)
