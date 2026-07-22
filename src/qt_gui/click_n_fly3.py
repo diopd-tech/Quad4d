@@ -503,8 +503,9 @@ class Application(QApplication):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
         # battery gate (operator safety): refuse to start on a pack already
-        # low enough to need landing before the show would end. A show that
-        # begins near the land-soon threshold will run critical mid-flight.
+        # in the land-soon/land-now band. The show loops indefinitely, so
+        # there is no fixed end to project a discharge to -- the in-flight
+        # critical auto-land (periodic) covers the pack draining mid-show.
         low = [(str(_id), self.fd.acs[_id].battery_v)
                for _id in self.fd.ids
                if battery_state(getattr(self.fd.acs[_id], 'battery_v', None))
