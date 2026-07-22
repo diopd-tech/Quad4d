@@ -49,8 +49,8 @@ STANDBY_POINTS = [
     ( 2.0, -2.0, 1.2),
     ( 0.0,  2.5, 1.2),
 ]
-STANDBY_AIRBORNE_ALT = 0.6   # m, altitude above which a drone counts as
-                             # climbed, so takeoff can hand over to Guided
+STANDBY_AIRBORNE_ALT = 0.4   # m, fallback altitude for "airborne" when the
+                             # ap_in_flight flag isn't available
 
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
@@ -447,6 +447,15 @@ class Application(QApplication):
         self._prepare_state = 'motors'
         self._prepare_t = time.time()
 
+    @staticmethod
+    def _drone_airborne(ac):
+        """Airborne if the autopilot says so (ap_in_flight, the reliable
+        signal) or, as a fallback, the measured altitude is past the
+        threshold."""
+        if getattr(ac, 'ap_in_flight', None) == 1:
+            return True
+        return ac.T[2, 3] > STANDBY_AIRBORNE_ALT
+
     def _advance_prepare(self):
         """Drive the PREPARE sequence from periodic(): motors -> takeoff,
         then hand over to the takeoff->standby step."""
@@ -613,12 +622,11 @@ class Application(QApplication):
         # drive the PREPARE staging sequence (motors -> takeoff)
         self._advance_prepare()
 
-        # takeoff -> standby: wait until every drone has actually climbed
-        # (altitude past the threshold), then arm Guided and send them to
-        # their fixed standby points. Fires once per takeoff.
+        # takeoff -> standby: wait until every drone is actually airborne,
+        # then arm Guided and send them to their fixed standby points.
+        # Fires once per takeoff.
         if getattr(self, '_pending_standby', False):
-            airborne = [self.fd.acs[i].T[2, 3] > STANDBY_AIRBORNE_ALT
-                        for i in self.fd.ids]
+            airborne = [self._drone_airborne(self.fd.acs[i]) for i in self.fd.ids]
             if airborne and all(airborne):
                 self._pending_standby = False
                 for ac_id in self.fd.ids:
