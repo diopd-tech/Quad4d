@@ -108,13 +108,21 @@ La séquence cible devient :
    - et pendant tout le vol, des commandes d'urgence visibles en permanence :
      land all, et kill par drone en dernier recours.
 
-Ce n'est pas un rêve lointain : la plomberie existe déjà dans le code. L'IHM
-parle déjà aux drones par le bus Ivy — elle bascule le mode `auto2` en Guided
-via le gestionnaire de settings, elle écoute `ROTORCRAFT_STATUS` (batterie,
-état) et `EXTERNAL_POSE` (mocap). Les briques manquantes sont du même type :
-déclencher les blocs du plan de vol (démarrage moteurs, décollage,
-atterrissage) par message `JUMP_TO_BLOCK`, couper les moteurs par le setting
-`kill_throttle`, et afficher la checklist à partir des messages déjà reçus.
+Ce n'est plus un projet lointain : la chaîne est **implémentée dans l'IHM
+opérateur et validée en simulation** (juillet 2026). L'IHM parle aux drones par
+le bus Ivy — elle bascule le mode `auto2` en Guided via le gestionnaire de
+settings, déclenche les blocs du plan de vol (démarrage moteurs, décollage,
+atterrissage) par message `JUMP_TO_BLOCK`, coupe les moteurs par le setting
+`kill_throttle`, et affiche une checklist par drone à partir des messages déjà
+reçus (`ROTORCRAFT_STATUS`, `EXTERNAL_POSE`) : pose mocap, liaison RC, liaison
+télémétrie et batterie, sous forme d'icônes vertes / jaunes / rouges reprenant
+le langage visuel du GCS.
+
+Concrètement, l'enchaînement se réduit à quelques boutons : un unique bouton
+**Décoller** enchaîne démarrage moteurs → décollage → mise en place aux points
+de standby fixes ; **Stop** ramène les drones à ces mêmes points ; **Land all**
+les fait atterrir ; et **Kill**, par drone et avec confirmation à deux clics
+(un kill accidentel fait tomber un drone), reste visible en permanence.
 
 **Que fait le show quand un drone doit être posé ?** Sans évitement réactif
 embarqué, rien ne garantit que la descente d'un drone ne croise pas la
@@ -125,11 +133,19 @@ garantie de non-croisement des descentes.
 
 ## 5. Limites et hypothèses
 
-- **Pas de règle batterie.** Il n'existe aujourd'hui ni seuil de tension ni
-  durée maximale de show : la gestion repose sur l'expérience de l'opérateur.
-  L'information de tension arrive pourtant déjà dans l'IHM via
-  `ROTORCRAFT_STATUS` — une alerte est une perspective naturelle, mais elle
-  demanderait de choisir un seuil validé en vol.
+- **Règle batterie (implémentée, seuils à confirmer en vol).** L'IHM applique
+  deux seuils de tension pack (3S) lus dans `ROTORCRAFT_STATUS` : *land-soon* à
+  10,5 V (3,5 V/cellule) et *land-now* à 9,9 V (3,3 V/cellule). Trois effets :
+  (1) une icône batterie verte / jaune / rouge par drone dans la checklist ;
+  (2) **blocage au lancement** — si un pack est déjà sous le seuil land-soon, le
+  show ne démarre pas et l'IHM demande de changer la batterie ; (3)
+  **atterrissage automatique** — si un drone en vol passe sous le seuil
+  land-now, un *land all* est déclenché. Il n'y a volontairement *pas*
+  d'estimation « la batterie tiendra-t-elle jusqu'à la fin ? » : le show boucle
+  indéfiniment, il n'existe donc pas de durée finie sur laquelle projeter la
+  décharge. Les deux seuils restent théoriques et sont à confirmer en vol ; une
+  estimation d'autonomie restante affichée *en information* (sans blocage) est
+  une perspective.
 - **Le GCS reste le secours.** Le concept cible déplace les commandes
   courantes vers l'IHM mais ne supprime rien : en cas de doute ou de panne de
   l'IHM, le GCS garde tous ses moyens d'action.
