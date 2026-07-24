@@ -113,6 +113,10 @@ class ScenarioPickerDialog(QDialog):
         self._custom_header_added = bool(customs)
         self.list.setMinimumWidth(300)
         self.list.currentRowChanged.connect(self._on_selection_changed)
+        # confirm the selection with a double-click or Enter (itemActivated
+        # fires on the Return key under X11), not only the Start button
+        self.list.itemDoubleClicked.connect(self._confirm_selection)
+        self.list.itemActivated.connect(self._confirm_selection)
         body.addWidget(self.list, stretch=1)
 
         self.detail_group = QGroupBox("DRONES")
@@ -133,9 +137,12 @@ class ScenarioPickerDialog(QDialog):
         buttons.addStretch(1)
         self.button_quit = QPushButton("Quit")
         self.button_quit.clicked.connect(self.reject)
+        self.button_quit.setAutoDefault(False)
+        self.button_custom.setAutoDefault(False)
         self.button_start = QPushButton("Start")
         self.button_start.setObjectName("primary")
         self.button_start.clicked.connect(self.accept)
+        self.button_start.setDefault(True)   # Enter validates the selection
         buttons.addWidget(self.button_quit)
         buttons.addWidget(self.button_start)
         outer.addLayout(buttons)
@@ -146,6 +153,13 @@ class ScenarioPickerDialog(QDialog):
         # grouped list and fall back to the first selectable row
         target = predefined[preselect] if 0 <= preselect < len(predefined) else None
         self._select_scenario(target)
+
+    def _confirm_selection(self, item):
+        """Accept the dialog if the activated row is a real scenario (not a
+        group header). Wired to double-click and Enter."""
+        row = self.list.row(item)
+        if 0 <= row < len(self._row_scenario) and self._row_scenario[row] is not None:
+            self.accept()
 
     def _add_header(self, text):
         item = QListWidgetItem(text)
