@@ -146,6 +146,11 @@ class Scenario27:   # vraie spirale montante a 3 drones
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
+class Scenario28:   # deux figure-of-eight a la meme hauteur, departs differents
+    desc  = 'two figure-of-eight, same height'
+    ids   = [112, 113]
+    trajs = ['space indexed figure of height', 'space indexed figure of height3 flat']
+
 
 scenarios = [
     Scenario1, 
@@ -174,7 +179,8 @@ scenarios = [
     Scenario24,
     Scenario25,
     Scenario26,
-    Scenario27
+    Scenario27,
+    Scenario28
     ]
 
 
@@ -191,6 +197,7 @@ _WITH_CONFLICT = [
     Scenario10,   # mixed: oval, figure-of-eight, gate race
     Scenario14,   # two figure-of-eight (cross at centre)
     Scenario24,   # three-way convergence
+    Scenario28,   # two figure-of-eight at the same height (cross at centre)
 ]
 
 for _c in scenarios:
