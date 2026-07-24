@@ -147,9 +147,14 @@ class Scenario27:   # vraie spirale montante a 3 drones
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
 class Scenario28:   # deux figure-of-eight a la meme hauteur, departs differents
+    # order matters: each drone flies the eight that STARTS on the same side
+    # as its standby point (112 -> standby [-2,-2] left, flies the left-start
+    # eight; 113 -> standby [2,-2] right, flies the right-start eight), so the
+    # (undeconflicted) standby<->start transits stay on their own side and do
+    # not cross. The two eights still conflict at the centre during the show.
     desc  = 'two figure-of-eight, same height'
     ids   = [112, 113]
-    trajs = ['space indexed figure of height', 'space indexed figure of height3 flat']
+    trajs = ['space indexed figure of height3 flat', 'space indexed figure of height']
 
 
 scenarios = [
