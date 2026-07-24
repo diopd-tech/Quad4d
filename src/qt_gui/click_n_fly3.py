@@ -141,6 +141,13 @@ class Drone:
                 logger.warning(f'aircraft {_id}: Ivy link down, command dropped ({e})')
             self.link_down = True
             return False
+        except (AttributeError, KeyError) as e:
+            # a setting name missing from THIS aircraft's settings (e.g.
+            # 'auto2' absent on some airframes): don't let it crash the
+            # periodic loop / handlers, degrade gracefully like a link drop
+            _id = getattr(self.conf, 'id', '?')
+            logger.warning(f'aircraft {_id}: command dropped, setting unavailable ({e})')
+            return False
         self.link_down = False
         return True
 
