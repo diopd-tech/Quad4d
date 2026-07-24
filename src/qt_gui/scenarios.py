@@ -72,10 +72,15 @@ class Scenario13:
     ids= [112, 113]
     trajs= ["queue leu leu 1", "queue leu leu 2"]
 
-class Scenario14:
+class Scenario14:   # deux figure-of-eight a la meme hauteur, conflit au centre
+    # order matters: each drone flies the eight that STARTS on the same side
+    # as its standby point (112 -> standby [-2,-2] left, left-start eight;
+    # 113 -> standby [2,-2] right, right-start eight), so the undeconflicted
+    # standby<->start transits stay on their own side and don't cross. The two
+    # eights conflict at the centre during the show (same height z=2).
     desc  = 'two figure-of-eight'
-    ids= [112, 113]
-    trajs= ["space indexed figure of height", "space indexed figure of height3"]
+    ids   = [112, 113]
+    trajs = ['space indexed figure of height3 flat', 'space indexed figure of height']
 
 class Scenario15:
     desc  = 'two concentric safe circles'
@@ -146,16 +151,6 @@ class Scenario27:   # vraie spirale montante a 3 drones
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
-class Scenario28:   # deux figure-of-eight a la meme hauteur, departs differents
-    # order matters: each drone flies the eight that STARTS on the same side
-    # as its standby point (112 -> standby [-2,-2] left, flies the left-start
-    # eight; 113 -> standby [2,-2] right, flies the right-start eight), so the
-    # (undeconflicted) standby<->start transits stay on their own side and do
-    # not cross. The two eights still conflict at the centre during the show.
-    desc  = 'two figure-of-eight, same height'
-    ids   = [112, 113]
-    trajs = ['space indexed figure of height3 flat', 'space indexed figure of height']
-
 
 scenarios = [
     Scenario1, 
@@ -184,8 +179,7 @@ scenarios = [
     Scenario24,
     Scenario25,
     Scenario26,
-    Scenario27,
-    Scenario28
+    Scenario27
     ]
 
 
@@ -200,9 +194,8 @@ _WITH_CONFLICT = [
     Scenario5,    # two back-and-forth (head-on)
     Scenario9,    # mixed: back-and-forth, gate race, circle
     Scenario10,   # mixed: oval, figure-of-eight, gate race
-    Scenario14,   # two figure-of-eight (cross at centre)
+    Scenario14,   # two figure-of-eight, same height (cross at centre)
     Scenario24,   # three-way convergence
-    Scenario28,   # two figure-of-eight at the same height (cross at centre)
 ]
 
 for _c in scenarios:
