@@ -299,15 +299,16 @@ class Traj47(Traj45):
         super().__init__(wps)
 
 class Traj47flat(Traj45):
-    # figure-of-height3 (E-W lobes) but flat at z=2 everywhere, and the
-    # waypoint list rotated so it starts at [-3,1] instead of [1.4,1.4]:
-    # paired with 'space indexed figure of height' (N-S lobes, also flat
-    # z=2), the two eights sit at the SAME height with DIFFERENT start
-    # points, and cross at the centre. Same idea as Scenario14 but flat.
-    name, desc = 'space indexed figure of height3 flat', 'figure-of-eight, flat z=2, offset start'
+    # figure-of-height3 (E-W lobes) flat at z=2 everywhere, waypoints
+    # rotated to start at [-1.4,1.4]. Paired with 'space indexed figure of
+    # height' (N-S lobes, also flat z=2), BOTH put the centre [0,0] at the
+    # same waypoint index (1) -> both reach it at the same time (t~3s and
+    # t~18s) -> a REAL conflict at the centre, at the same height. Different
+    # start points ([1.4,1.4] vs [-1.4,1.4]) so they don't collide at spawn.
+    name, desc = 'space indexed figure of height3 flat', 'figure-of-eight, flat z=2, conflicts at centre'
     def __init__(self):
         z = 2.
-        wps = [[-3,1,z], [-1.4,1.4,z], [0,0,z], [1.4,-1.4,z], [3,-1,z], [3,1,z], [1.4,1.4,z], [0,0,z], [-1.4,-1.4,z], [-3,-1,z], [-3,1,z]]
+        wps = [[-1.4,1.4,z], [0,0,z], [1.4,-1.4,z], [3,-1,z], [3,1,z], [1.4,1.4,z], [0,0,z], [-1.4,-1.4,z], [-3,-1,z], [-3,1,z], [-1.4,1.4,z]]
         super().__init__(wps)
 
 class Traj48(Traj45):
