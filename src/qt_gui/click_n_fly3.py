@@ -682,6 +682,7 @@ class Application(QApplication):
             # the drones panel doubles as the pre-flight checklist, so it
             # must live before takeoff, not only while guiding
             self.operator_view.drones_panel.update_from_fd(self.fd)
+            self.operator_view.update_voliere_map(self.fd)
             # always record (not only while guiding): staging and manual
             # moves are interesting to see in the live telemetry too
             self.operator_view.record_live_telemetry(self.fd)

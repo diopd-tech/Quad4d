@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QGridLayout,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
+from voliere_map import VoliereMapWidget
 import view_three_d as vtd
 import view_chronograms as view_chrono
 from live_telemetry import TelemetryRecorder, LiveTelemetryWindow
@@ -178,7 +179,13 @@ class OperatorWindow(QMainWindow):
             self.tdw.display_new_trajectory(self.model, i, show_details=False,
                                             show_quad=True, show_ref_quad=True)
         left.addWidget(self.tdw, stretch=1)
-        left.addWidget(self._build_console_group())
+        # bottom of the left column: console + the top-down volière map
+        bottom = QHBoxLayout()
+        bottom.setSpacing(10)
+        bottom.addWidget(self._build_console_group(), stretch=1)
+        self.voliere_map = VoliereMapWidget()
+        bottom.addWidget(self.voliere_map, stretch=0)
+        left.addLayout(bottom)
         body.addLayout(left, stretch=4)
 
         # right: column of panels
@@ -187,6 +194,7 @@ class OperatorWindow(QMainWindow):
         panels.addWidget(self._build_scenario_group())
         colors = ['#%02X%02X%02X' % (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
                   for c in vtd.TrajItem._colors]
+        self._drone_colors = colors   # reused by the volière map overlay
 
         trajs = [self.model.get_trajectory(i).name
                  for i in range(self.model.trajectory_nb())]
@@ -476,6 +484,18 @@ class OperatorWindow(QMainWindow):
 
     def log_text(self, txt):
         self.textedit_wid.appendPlainText(txt)
+
+    def update_voliere_map(self, fd):
+        """Feed the top-down map with each drone's live ENU (x, y) position."""
+        colors = self._drone_colors
+        drones = []
+        for i, _id in enumerate(fd.ids):
+            ac = fd.acs.get(_id)
+            if ac is None or not getattr(ac, 'vehicle_traj', None):
+                continue   # no pose yet
+            x, y = float(ac.T[0, 3]), float(ac.T[1, 3])
+            drones.append((x, y, colors[i % len(colors)], _id))
+        self.voliere_map.set_drones(drones)
 
     def load_show(self, model, fd, scenario):
         """Swap in a different model/flight director (used when the
