@@ -17,12 +17,13 @@ class ThreeDWidget(gl.GLViewWidget):
 
         self.scene_items={}
         self.build_grid(model)
+        self.build_floor()
         if model is not None:
             self.build_arena(model)
             self.arena = FlightArena(self, model.arena)
         self.build_frames()
 
-        defaults = [('grid', True), ('arena', False) , ('frames', False)]
+        defaults = [('grid', True), ('floor', True), ('arena', False) , ('frames', False)]
         for k, s in defaults:
             try: self.set_item_visible(k,s)
             except KeyError: pass
@@ -104,6 +105,34 @@ class ThreeDWidget(gl.GLViewWidget):
         for pos in poss: gl.GLLinePlotItem(arena_item, pos=pos, color=col, width=1)
         self.addItem(arena_item)
         self.scene_items['arena'] = arena_item
+
+    def build_floor(self):
+        """Lay the volière plan (media/voliere_plan.png, cropped to the room)
+        flat on the ground (z=0), scaled to the cage. Alignment is by cage
+        dimensions: the image spans VOLIERE_FLOOR in ENU metres -- tune those
+        to line the plan up with the real cage."""
+        import os
+        path = os.path.join(os.path.dirname(__file__), 'media', 'voliere_plan.png')
+        if not os.path.exists(path):
+            return
+        # ENU rectangle (metres) the plan covers: ((x_min,x_max),(y_min,y_max))
+        VOLIERE_FLOOR = ((-4.0, 4.0), (-5.0, 5.0))
+        img = mpimg.imread(path)                       # (H, W, 3|4), float [0,1]
+        if img.ndim == 2:
+            img = np.dstack([img] * 3)
+        if img.shape[2] == 3:                          # add opaque alpha
+            img = np.dstack([img, np.ones(img.shape[:2], dtype=img.dtype)])
+        tex = (img * 255).astype(np.ubyte)
+        # GLImageItem data is indexed [x, y]: put image cols along x, rows
+        # along y, and flip rows so the image top maps to +y (north)
+        data = np.ascontiguousarray(tex[::-1].transpose(1, 0, 2))
+        floor = gl.GLImageItem(data)
+        (x0, x1), (y0, y1) = VOLIERE_FLOOR
+        W, H = data.shape[0], data.shape[1]
+        floor.scale((x1 - x0) / W, (y1 - y0) / H, 1.)
+        floor.translate(x0, y0, 0.)
+        self.addItem(floor)
+        self.scene_items['floor'] = floor
 
     def build_frames(self):
         frames_item = gl.GLGraphicsItem.GLGraphicsItem()
