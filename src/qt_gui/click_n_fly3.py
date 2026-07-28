@@ -63,11 +63,11 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
 BALISE_XY = 3.0
 BALISE_Z  = 3.0
 
-# Global slowdown: every trajectory is traversed SLOWDOWN_FACTOR times
-# slower (same geometry, longer duration) so the drones track it closely on
-# the real hardware -- the demanded speed/accel are divided by the factor
-# (and its powers). 1.0 = original speed; raise it if they still lag.
-SLOWDOWN_FACTOR = 2.0
+# Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
+# (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
+# track well on the real hardware WITHOUT making the already-slow ones drag.
+# Adaptive per trajectory -- one knob. Airframe REF_MAX_SPEED is 2.5 m/s.
+TARGET_MAX_SPEED = 1.5   # m/s
 
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
@@ -122,12 +122,17 @@ class SlowedTraj:
         return getattr(self.traj, name)
 
 
-def apply_slowdown(model, factor=SLOWDOWN_FACTOR):
-    """Slow every trajectory of the model by `factor` (no-op if ~1)."""
-    if abs(factor - 1.0) < 1e-6:
-        return
+def apply_slowdown(model, target_v=TARGET_MAX_SPEED, npts=200):
+    """Cap each trajectory's PEAK speed at target_v: one faster than that is
+    slowed just enough (SlowedTraj) to bring its peak down to target_v;
+    slower ones are left untouched. Adaptive, so fast trajectories track well
+    without the already-slow ones dragging."""
     for i in range(model.trajectory_nb()):
-        model.set_trajectory(SlowedTraj(model.get_trajectory(i), factor), i)
+        traj = model.get_trajectory(i)
+        vmax = max(float(np.linalg.norm(traj.get(t)[:3, 1]))
+                   for t in np.linspace(0., traj.duration, npts))
+        if vmax > target_v + 1e-6:
+            model.set_trajectory(SlowedTraj(traj, vmax / target_v), i)
 
 
 def apply_balise_clearance(model, xy_limit=BALISE_XY, z=BALISE_Z, npts=200):
