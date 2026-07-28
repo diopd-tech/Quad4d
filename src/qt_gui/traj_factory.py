@@ -418,13 +418,21 @@ class CercleSafe3(p_mt.Circle):
         p_mt.Circle.__init__(self, [0, 0, 2.7], r=3., v=2.4, psit=p_t1d.CstOne(0))
 
 
-# Two rings at the same radius but stacked 1.5m apart in height: safe by
-# vertical separation whatever their phase (paired in a safe 2-drone scenario)
-class RingLow(p_mt.Circle):
-    name, desc = 'ring low', 'circle r=2, z=1.5'
+# Circle in the LEFT / RIGHT half of the cage: same radius, height and phase,
+# so the two drones keep a constant ~3.4m gap -> safe by spatial separation
+# (two separate loops side by side, not nested/stacked).
+class CircleLeft(p_mt.Circle):
+    name, desc = 'circle left', 'circle r=1 at x=-1.7, z=2'
     def __init__(self):
-        p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=1.5, psit=p_t1d.CstOne(0))
+        p_mt.Circle.__init__(self, [-1.7, 0, 2.], r=1., v=1.5, psit=p_t1d.CstOne(0))
 
+class CircleRight(p_mt.Circle):
+    name, desc = 'circle right', 'circle r=1 at x=+1.7, z=2'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [1.7, 0, 2.], r=1., v=1.5, psit=p_t1d.CstOne(0))
+
+# Circle high (r=2, z=3), paired with a low lissajous for a safe split-height,
+# different-shapes two-drone show.
 class RingHigh(p_mt.Circle):
     name, desc = 'ring high', 'circle r=2, z=3.0'
     def __init__(self):
@@ -559,6 +567,12 @@ class ShowLissajous(p_mt.Trajectory):
         Yc[0,p_mt._z] = self.z
         return Yc.T
 
+class ShowLissajousLow(ShowLissajous):
+    # same lissajous, flown low (z=1.5): paired with 'ring high' (z=3) for a
+    # safe split-height two-drone show with two different shapes
+    name, desc = 'show lissajous low', 'analytic 3:2 lissajous, z=1.5'
+    def __init__(self): super().__init__(z=1.5)
+
 
 # --- Space-indexed star (solo). 5-branch star, rounded by the periodic spline.
 #     Same family as Traj45 -> dynamics can be optimized later in your pipeline.
@@ -682,7 +696,8 @@ TrajFactory.register(QueueLeuLeu3, 'Poursuite')
 TrajFactory.register(CercleSafe1, 'safe_test')
 TrajFactory.register(CercleSafe2, 'safe_test')
 TrajFactory.register(CercleSafe3, 'safe_test')
-TrajFactory.register(RingLow, 'safe_test')
+TrajFactory.register(CircleLeft, 'safe_test')
+TrajFactory.register(CircleRight, 'safe_test')
 TrajFactory.register(RingHigh, 'safe_test')
 
 TrajFactory.register(ShowRosetteA, 'show')
@@ -704,6 +719,7 @@ TrajFactory.register(ShowOvalLow, 'show')
 TrajFactory.register(ShowOvalHigh, 'show')
 
 TrajFactory.register(ShowLissajous, 'show')
+TrajFactory.register(ShowLissajousLow, 'show')
 TrajFactory.register(ShowStar, 'show')
 
 TrajFactory.register(SpiraleA, 'show')
