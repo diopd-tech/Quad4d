@@ -19,11 +19,6 @@ class Scenario3:
     ids= [112, 113, 114]
     trajs= ["circle_with_intro1", "circle_with_intro2", "circle_with_intro3"]
 
-class Scenario4:
-    desc  = 'four circles with intro'
-    ids= [112, 113, 114, 115]
-    trajs= ["circle_with_intro1", "circle_with_intro2", "circle_with_intro3", "circle_with_intro112"]
-
 class Scenario5:
     desc  = 'two back-and-forth'
     ids= [112, 113]
@@ -165,9 +160,8 @@ class Scenario30:   # safe: formes differentes a hauteurs differentes
 scenarios = [
     Scenario1, 
     Scenario2, 
-    Scenario3, 
-    Scenario4, 
-    Scenario5, 
+    Scenario3,
+    Scenario5,
     Scenario6, 
     Scenario7, 
     Scenario8, 
