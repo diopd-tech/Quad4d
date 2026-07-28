@@ -56,12 +56,64 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
                              # used to confirm the mode switch landed before
                              # sending a guided goto (else it is dropped)
 
+# Balise (marker) clearance: any trajectory that reaches the cage edge
+# (|x| or |y| >= BALISE_XY anywhere) is flown at BALISE_Z the whole way, to
+# clear the physical markers standing near the volière edges. Whole-
+# trajectory lift (uniform height), so no vertical undulation.
+BALISE_XY = 3.0
+BALISE_Z  = 3.0
+
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
 SCHED_STANDOFF      = 0.15  # m, extra buffer over safety for the parked drone:
                             # it waits as close to the conflict as safety+standoff
                             # allows (staged at the gate, not back at its corner)
 SCHED_RESUME_MARGIN = 0.5   # s, extra wait after the other drone has cleared
+
+
+class ZLiftedTraj:
+    """Wrap a trajectory to fly it at a fixed height: same x, y and their
+    time-derivatives, but z pinned to a constant with zero vertical motion.
+    Used to lift a whole trajectory that reaches the cage edge up to a safe
+    height (balise clearance). Any other attribute/method falls through to
+    the wrapped trajectory unchanged."""
+    def __init__(self, traj, z):
+        self.traj = traj
+        self.z = float(z)
+        self.duration = traj.duration
+        self.name = getattr(traj, 'name', 'lifted')
+        self.desc = (getattr(traj, 'desc', '') + f' [lifted to {self.z:g}m]').strip()
+
+    def get(self, t):
+        Y = np.array(self.traj.get(t), dtype=float, copy=True)
+        Y[2, 0] = self.z     # z position -> constant
+        Y[2, 1:] = 0.        # z velocity/accel/jerk/snap -> no vertical motion
+        return Y
+
+    def __getattr__(self, name):   # delegate everything else to the wrapped traj
+        return getattr(self.traj, name)
+
+
+def apply_balise_clearance(model, xy_limit=BALISE_XY, z=BALISE_Z, npts=200):
+    """Lift to `z` every trajectory of the model that reaches the cage edge
+    (|x| or |y| >= xy_limit anywhere along it), to clear the volière markers.
+    Whole-trajectory lift (uniform height), so no vertical undulation. A
+    trajectory already flown at/above z is left untouched."""
+    for i in range(model.trajectory_nb()):
+        traj = model.get_trajectory(i)
+        reaches = False
+        z_ok = True
+        for t in np.linspace(0., traj.duration, npts):
+            Y = traj.get(t)
+            if abs(Y[0, 0]) >= xy_limit - 1e-6 or abs(Y[1, 0]) >= xy_limit - 1e-6:
+                reaches = True
+            if Y[2, 0] < z - 1e-6:
+                z_ok = False
+        if reaches and not z_ok:
+            model.set_trajectory(ZLiftedTraj(traj, z), i)
+            logger.info(f'trajectory {i} ({getattr(traj, "name", "?")}) reaches '
+                        f'the cage edge (|x| or |y| >= {xy_limit:g}m) -> lifted to '
+                        f'{z:g}m for balise clearance')
 
 
 class MainWindow(QMainWindow):
@@ -400,6 +452,7 @@ class Application(QApplication):
         self.model = model.Model()
         for traj_name in trajs:
             self.model.load_from_factory(traj_name)
+        apply_balise_clearance(self.model)   # lift edge-reaching trajs to 3m
 
         self.fd = FlightDirector(self.model, ids)
         self._assign_standby_points()
@@ -591,6 +644,7 @@ class Application(QApplication):
         new_model = model.Model()
         for traj_name in trajs:
             new_model.load_from_factory(traj_name)
+        apply_balise_clearance(new_model)   # lift edge-reaching trajs to 3m
 
         # Reuse Drone objects from the persistent pool (never dropped, so their
         # Ivy connection stays alive). A drone new to this run but already seen
