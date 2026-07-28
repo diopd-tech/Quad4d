@@ -46,9 +46,9 @@ DIST_TO_START_THRESHOLD = 0.3
 # happened to stop. Drones beyond this list fall back to their
 # trajectory start.
 STANDBY_POINTS = [
-    (-2.0, -2.0, 3.0),
-    ( 2.0, -2.0, 3.0),
-    ( 0.0,  2.5, 3.0),
+    (-1.5, -1.5, 1.2),
+    ( 1.5, -1.5, 1.2),
+    ( 0.0,  2.0, 1.2),
 ]
 STANDBY_AIRBORNE_ALT = 0.4   # m, fallback altitude for "airborne" when the
                              # ap_in_flight flag isn't available
