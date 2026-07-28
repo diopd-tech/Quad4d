@@ -418,6 +418,19 @@ class CercleSafe3(p_mt.Circle):
         p_mt.Circle.__init__(self, [0, 0, 2.7], r=3., v=2.4, psit=p_t1d.CstOne(0))
 
 
+# Two rings at the same radius but stacked 1.5m apart in height: safe by
+# vertical separation whatever their phase (paired in a safe 2-drone scenario)
+class RingLow(p_mt.Circle):
+    name, desc = 'ring low', 'circle r=2, z=1.5'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=1.5, psit=p_t1d.CstOne(0))
+
+class RingHigh(p_mt.Circle):
+    name, desc = 'ring high', 'circle r=2, z=3.0'
+    def __init__(self):
+        p_mt.Circle.__init__(self, [0, 0, 3.0], r=2., v=1.5, psit=p_t1d.CstOne(0))
+
+
 
 class SpiraleA(p_mt.Circle):
     name, desc = 'spirale a', 'spirale 1/3 : r=2 v=2, 120 deg, z sinus 2->4m'
@@ -669,6 +682,8 @@ TrajFactory.register(QueueLeuLeu3, 'Poursuite')
 TrajFactory.register(CercleSafe1, 'safe_test')
 TrajFactory.register(CercleSafe2, 'safe_test')
 TrajFactory.register(CercleSafe3, 'safe_test')
+TrajFactory.register(RingLow, 'safe_test')
+TrajFactory.register(RingHigh, 'safe_test')
 
 TrajFactory.register(ShowRosetteA, 'show')
 TrajFactory.register(ShowRosetteB, 'show')

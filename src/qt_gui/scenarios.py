@@ -151,6 +151,16 @@ class Scenario27:   # vraie spirale montante a 3 drones
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
+class Scenario29:   # safe: deux cercles concentriques bien separes (rayon + hauteur)
+    desc  = 'two safe circles, inner & outer'
+    ids   = [112, 113]
+    trajs = ['cercle safe 1', 'cercle safe 3']
+
+class Scenario30:   # safe: deux anneaux empiles, separes en hauteur (1.5m / 3.0m)
+    desc  = 'two stacked rings, low & high'
+    ids   = [112, 113]
+    trajs = ['ring low', 'ring high']
+
 
 scenarios = [
     Scenario1, 
@@ -179,7 +189,9 @@ scenarios = [
     Scenario24,
     Scenario25,
     Scenario26,
-    Scenario27
+    Scenario27,
+    Scenario29,
+    Scenario30
     ]
 
 
