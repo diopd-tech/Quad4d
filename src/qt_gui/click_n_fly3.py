@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # point. Larger = starts reliably but with a visible correction jump at
 # launch; smaller = cleaner start but hover jitter may prevent it from
 # ever triggering. History: v1 used 0.1, v3 uses 0.15.
-DIST_TO_START_THRESHOLD = 0.3
+DIST_TO_START_THRESHOLD = 0.5
 
 # Fixed standby points (ENU, metres), one per scenario drone slot, spread
 # across the cage. Drones go here on "Go to standby" (staging after
