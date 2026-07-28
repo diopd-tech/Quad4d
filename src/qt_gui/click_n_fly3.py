@@ -63,6 +63,12 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
 BALISE_XY = 3.0
 BALISE_Z  = 3.0
 
+# Global slowdown: every trajectory is traversed SLOWDOWN_FACTOR times
+# slower (same geometry, longer duration) so the drones track it closely on
+# the real hardware -- the demanded speed/accel are divided by the factor
+# (and its powers). 1.0 = original speed; raise it if they still lag.
+SLOWDOWN_FACTOR = 2.0
+
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
 SCHED_STANDOFF      = 0.15  # m, extra buffer over safety for the parked drone:
@@ -92,6 +98,36 @@ class ZLiftedTraj:
 
     def __getattr__(self, name):   # delegate everything else to the wrapped traj
         return getattr(self.traj, name)
+
+
+class SlowedTraj:
+    """Wrap a trajectory to traverse it k times slower: same geometry, but
+    duration * k, and the n-th time-derivative divided by k**n (so velocity
+    /k, accel /k^2 ...). Keeps the flat-output feedforward consistent, which
+    is what lets the drone track it. Other attributes fall through."""
+    def __init__(self, traj, factor):
+        self.traj = traj
+        self.k = float(factor)
+        self.duration = traj.duration * self.k
+        self.name = getattr(traj, 'name', 'slowed')
+        self.desc = (getattr(traj, 'desc', '') + f' [x{self.k:g} slower]').strip()
+
+    def get(self, t):
+        Y = np.array(self.traj.get(t / self.k), dtype=float, copy=True)
+        for d in range(1, Y.shape[1]):     # scale each time-derivative
+            Y[:, d] /= self.k ** d
+        return Y
+
+    def __getattr__(self, name):
+        return getattr(self.traj, name)
+
+
+def apply_slowdown(model, factor=SLOWDOWN_FACTOR):
+    """Slow every trajectory of the model by `factor` (no-op if ~1)."""
+    if abs(factor - 1.0) < 1e-6:
+        return
+    for i in range(model.trajectory_nb()):
+        model.set_trajectory(SlowedTraj(model.get_trajectory(i), factor), i)
 
 
 def apply_balise_clearance(model, xy_limit=BALISE_XY, z=BALISE_Z, npts=200):
@@ -449,6 +485,7 @@ class Application(QApplication):
         self.model = model.Model()
         for traj_name in trajs:
             self.model.load_from_factory(traj_name)
+        apply_slowdown(self.model)           # traverse everything slower
         apply_balise_clearance(self.model)   # lift edge-reaching trajs to 3m
 
         self.fd = FlightDirector(self.model, ids)
@@ -641,6 +678,7 @@ class Application(QApplication):
         new_model = model.Model()
         for traj_name in trajs:
             new_model.load_from_factory(traj_name)
+        apply_slowdown(new_model)           # traverse everything slower
         apply_balise_clearance(new_model)   # lift edge-reaching trajs to 3m
 
         # Reuse Drone objects from the persistent pool (never dropped, so their
