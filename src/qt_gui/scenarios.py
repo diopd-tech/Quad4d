@@ -213,3 +213,14 @@ _WITH_CONFLICT = [
 for _c in scenarios:
     _c.conflict = _c in _WITH_CONFLICT
 
+
+# --- default drone ids -------------------------------------------------
+# The scenarios are authored with ids 112, 113, 114 (drone slot 0, 1, 2).
+# Map them onto the actual lab fleet, by slot, so every scenario defaults to
+# the real drones. Change FLEET_IDS to renumber every scenario at once (the
+# operator can still remap per-scenario in the picker).
+FLEET_IDS = [110, 112, 111]
+_ID_REMAP = {112: FLEET_IDS[0], 113: FLEET_IDS[1], 114: FLEET_IDS[2]}
+for _c in scenarios:
+    _c.ids = [_ID_REMAP.get(_id, _id) for _id in _c.ids]
+
