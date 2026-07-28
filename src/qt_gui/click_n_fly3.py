@@ -111,9 +111,6 @@ def apply_balise_clearance(model, xy_limit=BALISE_XY, z=BALISE_Z, npts=200):
                 z_ok = False
         if reaches and not z_ok:
             model.set_trajectory(ZLiftedTraj(traj, z), i)
-            logger.info(f'trajectory {i} ({getattr(traj, "name", "?")}) reaches '
-                        f'the cage edge (|x| or |y| >= {xy_limit:g}m) -> lifted to '
-                        f'{z:g}m for balise clearance')
 
 
 class MainWindow(QMainWindow):
