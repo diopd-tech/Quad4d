@@ -9,6 +9,13 @@ from PySide6.QtGui import (QFont, QVector3D)
 
 logger = logging.getLogger(__name__)
 
+# Volière plan floor extent (ENU metres): ((x_min,x_max),(y_min,y_max)).
+# From the tiles' georeferencing the cropped plan is 11 x 14 m, one coloured
+# block = 1 m. The floor grid and the plan image both use this, centred on
+# the origin, so their 1 m squares coincide. To slide the plan under the
+# drones, shift both x's (or both y's) by the same amount.
+VOLIERE_FLOOR = ((-5.5, 5.5), (-7.0, 7.0))
+
 
 class ThreeDWidget(gl.GLViewWidget):
     def __init__(self, model=None):
@@ -90,7 +97,10 @@ class ThreeDWidget(gl.GLViewWidget):
         gy = gl.GLGridItem(grid_size, parentItem=grid_item)
         gy.rotate(90, 1, 0, 0)
         gy.translate(0, -5, 5)
-        gz = gl.GLGridItem(grid_size, parentItem=grid_item)
+        # floor grid sized to the volière plan (1 m cells, centred), so its
+        # lines fall on the plan's coloured 1 m blocks
+        (fx0, fx1), (fy0, fy1) = VOLIERE_FLOOR
+        gz = gl.GLGridItem(QVector3D(fx1 - fx0, fy1 - fy0, 1), parentItem=grid_item)
         self.addItem(grid_item)
         self.scene_items['grid'] = grid_item
         
@@ -115,13 +125,6 @@ class ThreeDWidget(gl.GLViewWidget):
         path = os.path.join(os.path.dirname(__file__), 'media', 'voliere_plan.png')
         if not os.path.exists(path):
             return
-        # ENU rectangle (metres) the plan covers: ((x_min,x_max),(y_min,y_max)).
-        # Sized from the tiles' georeferencing: the cropped plan is 11.03 x
-        # 14.04 m (0.027 m/px at z22, lat 43.56 deg) -- so 1 m on the plan
-        # matches the 1 m grid cells. Centred on the mocap origin; if the plan
-        # sits off from the drones, shift both x's (or both y's) by the same
-        # amount to slide it, keeping the span.
-        VOLIERE_FLOOR = ((-5.52, 5.52), (-7.02, 7.02))
         img = mpimg.imread(path)                       # (H, W, 3|4), float [0,1]
         if img.ndim == 2:
             img = np.dstack([img] * 3)
