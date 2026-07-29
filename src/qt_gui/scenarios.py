@@ -146,12 +146,12 @@ class Scenario27:   # vraie spirale montante a 3 drones
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
-class Scenario29:   # safe: deux cercles cote a cote (separation spatiale)
+class Scenario28:   # safe: deux cercles cote a cote (separation spatiale)
     desc  = 'two circles side by side'
     ids   = [112, 113]
     trajs = ['circle left', 'circle right']
 
-class Scenario30:   # safe: formes differentes a hauteurs differentes
+class Scenario29:   # safe: formes differentes a hauteurs differentes
     desc  = 'lissajous & ring, split heights'
     ids   = [112, 113]
     trajs = ['show lissajous low', 'ring high']
@@ -184,8 +184,8 @@ scenarios = [
     Scenario25,
     Scenario26,
     Scenario27,
-    Scenario29,
-    Scenario30
+    Scenario28,
+    Scenario29
     ]
 
 
