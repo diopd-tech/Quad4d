@@ -115,8 +115,13 @@ class ThreeDWidget(gl.GLViewWidget):
         path = os.path.join(os.path.dirname(__file__), 'media', 'voliere_plan.png')
         if not os.path.exists(path):
             return
-        # ENU rectangle (metres) the plan covers: ((x_min,x_max),(y_min,y_max))
-        VOLIERE_FLOOR = ((-4.0, 4.0), (-5.0, 5.0))
+        # ENU rectangle (metres) the plan covers: ((x_min,x_max),(y_min,y_max)).
+        # Sized from the tiles' georeferencing: the cropped plan is 11.03 x
+        # 14.04 m (0.027 m/px at z22, lat 43.56 deg) -- so 1 m on the plan
+        # matches the 1 m grid cells. Centred on the mocap origin; if the plan
+        # sits off from the drones, shift both x's (or both y's) by the same
+        # amount to slide it, keeping the span.
+        VOLIERE_FLOOR = ((-5.52, 5.52), (-7.02, 7.02))
         img = mpimg.imread(path)                       # (H, W, 3|4), float [0,1]
         if img.ndim == 2:
             img = np.dstack([img] * 3)
