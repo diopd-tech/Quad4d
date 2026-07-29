@@ -90,17 +90,18 @@ class ThreeDWidget(gl.GLViewWidget):
     def build_grid(self, model): # FIXME: needs love
         extends = model.arena.extends if model is not None else ((-5, 5), (-5, 5), (0, 10.))
         grid_item = gl.GLGraphicsItem.GLGraphicsItem()
-        grid_size = QVector3D(10,10, 1)
-        gx = gl.GLGridItem(grid_size, parentItem=grid_item)
-        gx.rotate(90, 0, 1, 0)
-        gx.translate(-5, 0, 5)
-        gy = gl.GLGridItem(grid_size, parentItem=grid_item)
-        gy.rotate(90, 1, 0, 0)
-        gy.translate(0, -5, 5)
-        # floor grid sized to the volière plan (1 m cells, centred), so its
-        # lines fall on the plan's coloured 1 m blocks
+        # all three grids sized to the volière plan (1 m cells, centred), so
+        # the two vertical walls end exactly on the floor's edges and their
+        # cells line up with the plan's 1 m blocks
         (fx0, fx1), (fy0, fy1) = VOLIERE_FLOOR
-        gz = gl.GLGridItem(QVector3D(fx1 - fx0, fy1 - fy0, 1), parentItem=grid_item)
+        Lx, Ly, Hz = fx1 - fx0, fy1 - fy0, 10.
+        gx = gl.GLGridItem(QVector3D(Hz, Ly, 1), parentItem=grid_item)  # y-z wall at x_min
+        gx.rotate(90, 0, 1, 0)
+        gx.translate(fx0, 0, Hz / 2)
+        gy = gl.GLGridItem(QVector3D(Lx, Hz, 1), parentItem=grid_item)  # x-z wall at y_min
+        gy.rotate(90, 1, 0, 0)
+        gy.translate(0, fy0, Hz / 2)
+        gz = gl.GLGridItem(QVector3D(Lx, Ly, 1), parentItem=grid_item)  # floor
         self.addItem(grid_item)
         self.scene_items['grid'] = grid_item
         
