@@ -126,6 +126,26 @@ class Scenario23:   # vraie spirale montante a 2 drones (memes helices, dephasee
     ids   = [112, 113]
     trajs = ['spirale montante a', 'spirale montante c']
 
+class Scenario24:   # fleur qui s'ouvre/se ferme, 3 drones
+    desc  = 'blooming flower, 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['flower a', 'flower b', 'flower c']
+
+class Scenario25:   # vague synchronisee (ola), 3 drones
+    desc  = 'synchronised wave, 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['wave left', 'wave mid', 'wave right']
+
+class Scenario26:   # double helice / ADN, 2 drones
+    desc  = 'double helix (DNA), 2 drones'
+    ids   = [112, 113]
+    trajs = ['dna strand a', 'dna strand b']
+
+class Scenario27:   # cascade en escalier, 3 drones
+    desc  = 'cascade staircase, 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['cascade low', 'cascade mid', 'cascade high']
+
 
 scenarios = [
     Scenario1,
@@ -151,6 +171,10 @@ scenarios = [
     Scenario21,
     Scenario22,
     Scenario23,
+    Scenario24,
+    Scenario25,
+    Scenario26,
+    Scenario27,
     ]
 
 

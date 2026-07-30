@@ -636,6 +636,100 @@ class SpiraleMontanteC(ClosedLoop):
     def __init__(self): super().__init__(_spirale_montante(4*np.pi/3))
 
 
+# --- Blooming flower: 3 drones 120deg apart, rotating while the radius
+#     breathes between Rmin and Rmax (opens from a tight bud to r=3, back).
+#     om/omr = 3 -> exactly 3 turns per breath, so the loop closes cleanly.
+#     Rmin kept >0.6m so the 3 drones (120deg) never get within safety.
+class _Flower(p_mt.Trajectory):
+    def __init__(self, a0, Rc=1.85, Ra=1.15, om=0.9, omr=0.3, z=2.5):
+        self.a0, self.Rc, self.Ra, self.om, self.omr, self.z = a0, Rc, Ra, om, omr, z
+        self.t0, self.duration = 0., 2*np.pi/omr   # one full breath
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt = t - self.t0
+        w, wr = self.om, self.omr
+        phi = w*dt + self.a0
+        c, s = np.cos(phi), np.sin(phi)
+        R  =  self.Rc - self.Ra*np.cos(wr*dt)
+        R1 =  self.Ra*wr    *np.sin(wr*dt)
+        R2 =  self.Ra*wr**2 *np.cos(wr*dt)
+        R3 = -self.Ra*wr**3 *np.sin(wr*dt)
+        R4 = -self.Ra*wr**4 *np.cos(wr*dt)
+        Yc = np.zeros((5, 4))
+        Yc[0, p_mt._x], Yc[0, p_mt._y], Yc[0, p_mt._z] = R*c, R*s, self.z
+        Yc[1, p_mt._x] = R1*c - R*w*s
+        Yc[1, p_mt._y] = R1*s + R*w*c
+        Yc[2, p_mt._x] = (R2 - R*w**2)*c - 2*R1*w*s
+        Yc[2, p_mt._y] = (R2 - R*w**2)*s + 2*R1*w*c
+        Yc[3, p_mt._x] = (R3 - 3*R1*w**2)*c + (-3*R2*w + R*w**3)*s
+        Yc[3, p_mt._y] = (R3 - 3*R1*w**2)*s + ( 3*R2*w - R*w**3)*c
+        Yc[4, p_mt._x] = (R4 - 6*R2*w**2 + R*w**4)*c + (-4*R3*w + 4*R1*w**3)*s
+        Yc[4, p_mt._y] = (R4 - 6*R2*w**2 + R*w**4)*s + ( 4*R3*w - 4*R1*w**3)*c
+        return Yc.T
+
+class FlowerA(_Flower):
+    name, desc = 'flower a', 'blooming flower 1/3 (3 drones, breathing)'
+    def __init__(self): super().__init__(0.)
+class FlowerB(_Flower):
+    name, desc = 'flower b', 'blooming flower 2/3'
+    def __init__(self): super().__init__(2*np.pi/3)
+class FlowerC(_Flower):
+    name, desc = 'flower c', 'blooming flower 3/3'
+    def __init__(self): super().__init__(4*np.pi/3)
+
+
+# --- Mexican wave: 3 drones stay put in a row (fixed x, y) and bob up/down
+#     in z with a phase offset -> a travelling "ola". Fixed >2m apart -> safe.
+class _VerticalBob(p_mt.Trajectory):
+    def __init__(self, x0, y0, zc, za, om, phi):
+        self.x0, self.y0, self.zc, self.za, self.om, self.phi = x0, y0, zc, za, om, phi
+        self.t0, self.duration = 0., 2*np.pi/om   # one full bob
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt = t - self.t0
+        a = self.om*dt + self.phi
+        s, c = np.sin(a), np.cos(a)
+        Yc = np.zeros((5, 4))
+        Yc[0, p_mt._x], Yc[0, p_mt._y] = self.x0, self.y0
+        Yc[0, p_mt._z] = self.zc + self.za*s
+        Yc[1, p_mt._z] =  self.za*self.om    *c
+        Yc[2, p_mt._z] = -self.za*self.om**2 *s
+        Yc[3, p_mt._z] = -self.za*self.om**3 *c
+        Yc[4, p_mt._z] =  self.za*self.om**4 *s
+        return Yc.T
+
+class WaveLeft(_VerticalBob):
+    name, desc = 'wave left', 'vertical bob at x=-2.5'
+    def __init__(self): super().__init__(-2.5, 0., 2.5, 1.2, 1.0, 0.)
+class WaveMid(_VerticalBob):
+    name, desc = 'wave mid', 'vertical bob at x=0'
+    def __init__(self): super().__init__(0., 0., 2.5, 1.2, 1.0, 2*np.pi/3)
+class WaveRight(_VerticalBob):
+    name, desc = 'wave right', 'vertical bob at x=+2.5'
+    def __init__(self): super().__init__(2.5, 0., 2.5, 1.2, 1.0, 4*np.pi/3)
+
+
+# --- Double helix / DNA: two strands 180deg apart on the ascending helix,
+#     so they stay diametrically opposite (4m apart) -> safe.
+class DnaA(ClosedLoop):
+    name, desc = 'dna strand a', 'helix strand, 0 deg'
+    def __init__(self): super().__init__(_spirale_montante(0.))
+class DnaB(ClosedLoop):
+    name, desc = 'dna strand b', 'helix strand, 180 deg'
+    def __init__(self): super().__init__(_spirale_montante(np.pi))
+
+
+# --- Cascade: the same circle at 3 heights, 120deg apart -> a rotating
+#     3-tier staircase. Separated in height (1.5m) and angle -> safe.
+class CascadeLow(p_mt.Circle):
+    name, desc = 'cascade low', 'circle r=2 z=1.5'
+    def __init__(self): p_mt.Circle.__init__(self, [0, 0, 1.5], r=2., v=1.5, alpha0=0.,        psit=p_t1d.CstOne(0))
+class CascadeMid(p_mt.Circle):
+    name, desc = 'cascade mid', 'circle r=2 z=3.0, +120 deg'
+    def __init__(self): p_mt.Circle.__init__(self, [0, 0, 3.0], r=2., v=1.5, alpha0=2*np.pi/3, psit=p_t1d.CstOne(0))
+class CascadeHigh(p_mt.Circle):
+    name, desc = 'cascade high', 'circle r=2 z=4.5, +240 deg'
+    def __init__(self): p_mt.Circle.__init__(self, [0, 0, 4.5], r=2., v=1.5, alpha0=4*np.pi/3, psit=p_t1d.CstOne(0))
 
 
 
@@ -736,6 +830,21 @@ TrajFactory.register(ScaraRace, 'show')
 TrajFactory.register(SpiraleMontanteA, 'show')
 TrajFactory.register(SpiraleMontanteB, 'show')
 TrajFactory.register(SpiraleMontanteC, 'show')
+
+TrajFactory.register(FlowerA, 'show')
+TrajFactory.register(FlowerB, 'show')
+TrajFactory.register(FlowerC, 'show')
+
+TrajFactory.register(WaveLeft, 'show')
+TrajFactory.register(WaveMid, 'show')
+TrajFactory.register(WaveRight, 'show')
+
+TrajFactory.register(DnaA, 'show')
+TrajFactory.register(DnaB, 'show')
+
+TrajFactory.register(CascadeLow, 'show')
+TrajFactory.register(CascadeMid, 'show')
+TrajFactory.register(CascadeHigh, 'show')
 
 TrajFactory.register(ConflitTriA, 'Conflicts')
 TrajFactory.register(ConflitTriB, 'Conflicts')
