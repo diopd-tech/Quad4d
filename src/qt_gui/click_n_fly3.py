@@ -63,6 +63,11 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
 # check needed. Layers must be >= the safety distance apart.
 TRANSIT_LAYERS = [2.0, 3.5, 5.0]   # metres, one per drone slot
 TRANSIT_ARRIVE = 0.4               # m, sub-target arrival threshold
+# Phase 2: if a simultaneous straight-line transit stays this far apart
+# (checked on a constant-speed model), take it directly; otherwise fall back
+# to the layered climb. Margin > safety to absorb tracking error.
+TRANSIT_DIRECT_MARGIN = 1.3        # m
+TRANSIT_MODEL_SPEED   = 1.0        # m/s, speed assumed for the direct-safe check
 
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
@@ -371,16 +376,39 @@ class FlightDirector:
         elif self.status == FDStatus.FINISHED:
             pass
 
-    # --- height-layered transit (safe by construction) ------------------
+    # --- transit: direct if verified safe, else height-layered ----------
+    def _direct_transit_safe(self, targets, margin=TRANSIT_DIRECT_MARGIN,
+                             speed=TRANSIT_MODEL_SPEED, dt=0.1):
+        """True if all drones can go STRAIGHT to their targets at the same
+        time without getting within `margin` of each other, on a constant-
+        speed model (each stops on arrival). Conservative check -> if unsure
+        we fall back to the layered transit."""
+        P  = {i: np.asarray(self.acs[i].T[:3, 3], dtype=float) for i in self.ids}
+        Tg = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
+        dur = {i: max(np.linalg.norm(Tg[i] - P[i]) / speed, 1e-3) for i in self.ids}
+
+        def pos(i, t):
+            return P[i] + (Tg[i] - P[i]) * min(t / dur[i], 1.0)
+
+        ids = list(self.ids)
+        for t in np.arange(0., max(dur.values()) + dt, dt):
+            for a in range(len(ids)):
+                for b in range(a + 1, len(ids)):
+                    if np.linalg.norm(pos(ids[a], t) - pos(ids[b], t)) < margin:
+                        return False
+        return True
+
     def start_transit(self, targets):
-        """Begin a transit to `targets` {ac_id:(x,y,z)}: every drone climbs
-        to its own layer altitude, moves horizontally there (distinct
-        heights -> crossings are safe), then descends to its target. A
-        barrier between phases keeps them layered the whole horizontal move,
-        so it is safe for ANY start positions."""
+        """Begin a transit to `targets` {ac_id:(x,y,z)}. If a simultaneous
+        straight-line transit is verified conflict-free, take it directly;
+        otherwise use the height-layered climb (safe by construction). Either
+        way it is safe: we never run an unverified direct transit."""
+        targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
+        direct = self._direct_transit_safe(targets)
         self._transit = {
-            'phase': 'climb',
-            'targets':  {i: tuple(float(v) for v in targets[i]) for i in self.ids},
+            'mode':  'direct' if direct else 'layered',
+            'phase': 'direct' if direct else 'climb',
+            'targets':  targets,
             'start_xy': {i: (float(self.acs[i].T[0, 3]), float(self.acs[i].T[1, 3]))
                          for i in self.ids},
             'layer':    {i: TRANSIT_LAYERS[k % len(TRANSIT_LAYERS)]
@@ -389,9 +417,12 @@ class FlightDirector:
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
+        logger.info(f'transit: {"direct" if direct else "layered (crossing detected)"}')
 
     def _transit_target(self, i):
         t = self._transit
+        if t['mode'] == 'direct':
+            return t['targets'][i]                       # straight to target
         sx, sy = t['start_xy'][i]
         tx, ty, tz = t['targets'][i]
         lz = t['layer'][i]
@@ -404,8 +435,8 @@ class FlightDirector:
             self.acs[i].goto_point(self._transit_target(i))
 
     def transit_step(self):
-        """Resend the current sub-target, advance the phase once EVERY drone
-        has reached it (barrier). Returns True when the whole transit ends."""
+        """Resend the current sub-target, advance once EVERY drone has
+        reached it (barrier). Returns True when the whole transit ends."""
         t = getattr(self, '_transit', None)
         if t is None:
             return True
@@ -416,6 +447,8 @@ class FlightDirector:
             for i in self.ids)
         if not arrived:
             return False
+        if t['mode'] == 'direct':
+            self._transit = None; return True            # single hop done
         if t['phase'] == 'climb':
             t['phase'] = 'move';    return False
         if t['phase'] == 'move':
