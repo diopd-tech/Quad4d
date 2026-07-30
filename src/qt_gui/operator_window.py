@@ -30,6 +30,34 @@ def _tinted_icon(path, size, color):
     return QIcon(pm)
 
 
+class _ContrastBar(QProgressBar):
+    """Progress bar whose % text stays readable over both regions: grey over
+    the dark groove, dark over the grey chunk. The base widget draws the groove
+    and chunk (text hidden); we draw the text twice, clipped to each region."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setTextVisible(False)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.maximum() <= self.minimum():
+            return
+        text = self.text()
+        rect = self.rect()
+        frac = (self.value() - self.minimum()) / (self.maximum() - self.minimum())
+        fill_w = round(rect.width() * frac)
+        p = QPainter(self)
+        p.setFont(self.font())
+        p.setClipRect(0, 0, fill_w, rect.height())          # over the grey chunk
+        p.setPen(QColor("#0E110F"))
+        p.drawText(rect, Qt.AlignCenter, text)
+        p.setClipRect(fill_w, 0, rect.width() - fill_w, rect.height())  # over groove
+        p.setPen(QColor("#8B938F"))
+        p.drawText(rect, Qt.AlignCenter, text)
+        p.end()
+
+
 STYLE = """
 
     QWidget#root { background-color: #131715; }
@@ -112,10 +140,10 @@ STYLE = """
 
     QProgressBar {
         background-color: #0E110F; border: 1px solid #2A312D;
-        border-radius: 5px; min-height: 16px; text-align: center;
-        color: #EAF2EC; font-size: 11px; font-weight: 600;
+        border-radius: 5px; height: 10px; text-align: center;
+        color: #8B938F; font-size: 11px;
     }
-    QProgressBar::chunk { background-color: #2F6B4F; border-radius: 4px; }
+    QProgressBar::chunk { background-color: #8B938F; border-radius: 4px; }
 
     QPlainTextEdit {
         background-color: #0E110F; color: #C7D0CB;
@@ -443,7 +471,7 @@ class OperatorWindow(QMainWindow):
         else:
             self.button_land_all.clicked.connect(h)
 
-        self.progress = QProgressBar()
+        self.progress = _ContrastBar()
         self.progress.setValue(0)
 
         # paired layout instead of a tall stack (kill moved into the
