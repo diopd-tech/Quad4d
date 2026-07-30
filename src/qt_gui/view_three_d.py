@@ -197,9 +197,11 @@ class FlightArena:
 # 3D representation of a trajectory (reference and real tracks, reference and real quads, waypoints)
 #
 class TrajItem:
-    _colors = [(0.12, 0.47, 0.7 , 1),
-               (1.  , 0.5, 0.055, 1),
-               (0.17, 0.63, 0.17, 1)]
+    # high-contrast on the pink/blue volière floor plan: none of these is
+    # near the salmon-pink or cornflower-blue of the ground
+    _colors = [(1.0  , 0.83, 0.0  , 1),   # yellow      #FFD400
+               (0.0  , 0.90, 0.46 , 1),   # bright green #00E676
+               (0.835, 0.0 , 0.976, 1)]   # magenta/violet #D500F9
     
     def __init__(self, traj, parent, idx, show_details, show_super_details, show_quad=False, show_ref_quad=False, show_ref_traj=True):
         self.waypoints_item = None

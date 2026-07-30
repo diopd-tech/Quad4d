@@ -47,7 +47,7 @@ def _state_icon(kind, state, size=_ICON_SIZE):
 
 
 
-_DEFAULT_COLORS = ["#1E78B3", "#FF800E", "#2BA02B"]
+_DEFAULT_COLORS = ["#FFD400", "#00E676", "#D500F9"]   # yellow / green / violet
 
 _VALUE = "#C7D0CB"
 _MUTED = "#8B938F"
