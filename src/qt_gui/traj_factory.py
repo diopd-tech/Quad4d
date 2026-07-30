@@ -709,14 +709,23 @@ class WaveRight(_VerticalBob):
     def __init__(self): super().__init__(2.5, 0., 2.5, 1.2, 1.0, 4*np.pi/3)
 
 
-# --- Double helix / DNA: two strands 180deg apart on the ascending helix,
-#     so they stay diametrically opposite (4m apart) -> safe.
+# --- Double helix / DNA: two strands 180deg apart in ANGLE and opposite in
+#     HEIGHT (z amplitude flipped) -> when one rises the other dips, so they
+#     weave like DNA instead of looking like the plain spiral. Always
+#     diametrically opposite (4m apart horizontally) -> safe.
+def _helix_strand(a0, z_up=True):
+    r, v, N, spacing, z_min = 2., 2., 3, 1.8, 1.0
+    om = v/r;  om_z = om/(2*N)
+    a = spacing*N/2.;  c = z_min + a
+    return p_mt.Circle([0, 0, c], r=r, v=v, alpha0=a0, psit=p_t1d.CstOne(0),
+                       zt=p_t1d.SinOne(c=c, a=(a if z_up else -a), om=om_z))
+
 class DnaA(ClosedLoop):
-    name, desc = 'dna strand a', 'helix strand, 0 deg'
-    def __init__(self): super().__init__(_spirale_montante(0.))
+    name, desc = 'dna strand a', 'helix strand, 0 deg, z up'
+    def __init__(self): super().__init__(_helix_strand(0., z_up=True))
 class DnaB(ClosedLoop):
-    name, desc = 'dna strand b', 'helix strand, 180 deg'
-    def __init__(self): super().__init__(_spirale_montante(np.pi))
+    name, desc = 'dna strand b', 'helix strand, 180 deg, z opposite (weaves)'
+    def __init__(self): super().__init__(_helix_strand(np.pi, z_up=False))
 
 
 # --- Cascade: the same circle at 3 heights, 120deg apart -> a rotating
