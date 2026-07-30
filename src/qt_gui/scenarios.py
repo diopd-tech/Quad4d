@@ -116,7 +116,7 @@ class Scenario21:   # spirale a 2 drones
     ids   = [112, 113]
     trajs = ['spirale a', 'spirale c']
 
-class Scenario22:   # vraie spirale montante a 3 drones (4 tours, plus haute)
+class Scenario22:   # vraie spirale montante a 3 drones
     desc  = 'true ascending spiral, 3 drones'
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
