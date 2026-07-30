@@ -669,10 +669,10 @@ class Application(QApplication):
         self.operator_view.set_preflight_enabled(False)
 
     def on_stop_clicked(self):
-        # stay in Guided and return to the fixed standby points, via the
-        # height-layered transit (deconflicted, safe from any show position).
-        # RETURNING drives the transit from fd.run(); it ends at FINISHED.
-        self.operator_view.log_text('Show stopped: returning to standby (layered transit)')
+        # stay in Guided and return to the fixed standby points, via the same
+        # deconflicted transit as launch (staggered departures). RETURNING
+        # drives the transit from fd.run(); it ends at FINISHED.
+        self.operator_view.log_text('Show stopped: returning to standby (deconflicted)')
         self.is_guiding = False
         targets = {ac_id: (self.fd.acs[ac_id].standby_point
                            or tuple(float(v) for v in self.fd.acs[ac_id].Yref[:3, 0]))
@@ -762,8 +762,8 @@ class Application(QApplication):
         now = time.time()
         elapsed = now - self.t0
         if elapsed >= self.dt_control:
-            # RETURNING drives the layered return transit from fd.run() even
-            # though the show is no longer guiding
+            # RETURNING drives the deconflicted return transit from fd.run()
+            # even though the show is no longer guiding
             if self.is_guiding or self.fd.status == FDStatus.RETURNING:
                 self.fd.run()
             # the drones panel doubles as the pre-flight checklist, so it
