@@ -56,14 +56,10 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
                              # used to confirm the mode switch landed before
                              # sending a guided goto (else it is dropped)
 
-# Transit deconfliction (join-start / return-standby) by lambda-scheduling:
-# a lower-priority drone waits at its start until it can fly STRAIGHT to its
-# target without coming within TRANSIT_MARGIN of an earlier drone's transit
-# (priority = drone order). Direct paths, crossings resolved by staggering.
-TRANSIT_MARGIN      = 1.3    # m, min inter-drone distance (> safety, for tracking)
-TRANSIT_MODEL_SPEED = 1.0    # m/s, speed assumed when scheduling (slow = conservative)
-TRANSIT_MAX_DELAY   = 10.0   # s, cap on how long a drone waits
-TRANSIT_ARRIVE      = 0.4    # m, target arrival threshold
+# Transit (join-start / return-standby): drones fly straight to their targets.
+# Inter-drone deconfliction during the transit is not implemented yet (the
+# scheduling / height-layering approaches were removed pending a decision).
+TRANSIT_ARRIVE = 0.4    # m, target arrival threshold
 
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
@@ -372,89 +368,25 @@ class FlightDirector:
         elif self.status == FDStatus.FINISHED:
             pass
 
-    # --- transit deconfliction: lambda-scheduling with a mid-path hold ---
-    def _schedule_holds(self, targets, margin=TRANSIT_MARGIN,
-                        speed=TRANSIT_MODEL_SPEED, dt=0.1, max_delay=TRANSIT_MAX_DELAY):
-        """Priority = drone order (drone 0 never yields). Each lower-priority
-        drone flies STRAIGHT toward its target but, rather than wait parked at
-        its start, it advances to the last safe point on its line (the 'gate')
-        just before it would come within `margin` of a higher-priority drone,
-        holds there while that drone passes, then continues. Returns
-        {ac_id: (gate_point, resume_t)}: command the gate until resume_t, then
-        the target. resume_t is capped at max_delay (with a warning)."""
-        P   = {i: np.asarray(self.acs[i].T[:3, 3], dtype=float) for i in self.ids}
-        Tg  = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
-        dur = {i: max(np.linalg.norm(Tg[i] - P[i]) / speed, 1e-3) for i in self.ids}
-        ids = list(self.ids)
-        horizon = 2 * max(dur.values()) + max_delay + 1.0
-        sched = {}                              # i -> (s_hold, wait) in seconds
-
-        def pos(i, t, s_hold, wait):            # drone i at time t under its schedule
-            if t <= s_hold:      frac = t / dur[i]                 # heading to the gate
-            elif t <= s_hold + wait: frac = s_hold / dur[i]        # holding at the gate
-            else:                frac = (t - wait) / dur[i]        # resumed to target
-            return P[i] + (Tg[i] - P[i]) * min(frac, 1.0)
-
-        def first_clash(i, s_hold, wait):       # earliest t drone i clashes with a fixed j, or None
-            for t in np.arange(0., horizon + dt, dt):
-                pi = pos(i, t, s_hold, wait)
-                for j in sched:
-                    if np.linalg.norm(pi - pos(j, t, *sched[j])) < margin:
-                        return float(t)
-            return None
-
-        for k, i in enumerate(ids):
-            if k == 0 or first_clash(i, dur[i], 0.) is None:
-                sched[i] = (dur[i], 0.)                 # nothing higher -> fly straight
-                continue
-            t1 = first_clash(i, dur[i], 0.)
-            s_hold = 0.                                 # walk the gate back to the latest safe point
-            for tb in np.arange(t1, -dt, -dt):
-                tb = max(float(tb), 0.)
-                if first_clash(i, tb, horizon) is None:  # hold here forever -> clear?
-                    s_hold = tb; break
-            wait = max_delay                           # find the earliest safe resume
-            for r in np.arange(s_hold, s_hold + max_delay + dt, dt):
-                if first_clash(i, s_hold, float(r) - s_hold) is None:
-                    wait = float(r) - s_hold; break
-            else:
-                logger.warning(f'transit: drone {i} not cleared within {max_delay}s')
-            sched[i] = (s_hold, wait)
-
-        out = {}
-        for i in ids:
-            s_hold, wait = sched[i]
-            gate = tuple(P[i] + (Tg[i] - P[i]) * min(s_hold / dur[i], 1.0))
-            out[i] = (gate, s_hold + wait)             # (gate_point, resume time)
-        return out
-
+    # --- transit: direct flight to targets (deconfliction TBD) ----------
+    # NOTE: no transit deconfliction for now. Every drone flies STRAIGHT to
+    # its target on Launch (join start points) and Stop (return to standby).
+    # The scheduling / gate-hold / height-layering approaches were removed
+    # after sim tests; the method is still under discussion.
     def start_transit(self, targets):
-        """Begin the deconflicted transit to `targets` {ac_id:(x,y,z)}: every
-        drone flies STRAIGHT to its target; lower-priority ones hold on their
-        line at the gate until the higher-priority ones have passed."""
+        """Begin the transit to `targets` {ac_id:(x,y,z)}: every drone flies
+        straight to its target (no inter-drone deconfliction yet)."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
-        self._transit = {
-            'targets':   targets,
-            'sched':     self._schedule_holds(targets),   # i -> (gate_point, resume_t)
-            'start_t':   time.time(),
-        }
+        self._transit = {'targets': targets}
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
-        logger.info("transit: " + ", ".join(
-            f"{i}:hold@{tuple(round(v,2) for v in g)}->{r:.1f}s"
-            for i, (g, r) in self._transit['sched'].items()))
-
-    def _transit_target(self, i):
-        t = self._transit
-        gate, resume_t = t['sched'][i]
-        if (time.time() - t['start_t']) < resume_t:
-            return gate                     # advance to the gate and hold there
-        return t['targets'][i]              # then continue to target
+        logger.info("transit: direct to " + ", ".join(
+            f"{i}:{tuple(round(v, 2) for v in g)}" for i, g in targets.items()))
 
     def _transit_send(self):
         for i in self.ids:
-            self.acs[i].goto_point(self._transit_target(i))
+            self.acs[i].goto_point(self._transit['targets'][i])
 
     def transit_step(self):
         """Resend targets (robust to a dropped goto); True once every drone
