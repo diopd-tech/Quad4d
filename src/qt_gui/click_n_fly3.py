@@ -56,6 +56,14 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
                              # used to confirm the mode switch landed before
                              # sending a guided goto (else it is dropped)
 
+# Height-layered transit (deconflict the join-start and return-standby
+# moves): every drone climbs to its OWN layer altitude, moves horizontally
+# at that altitude (crossings are safe -- distinct heights), then descends
+# to its target. Safe by construction for ANY start positions, no runtime
+# check needed. Layers must be >= the safety distance apart.
+TRANSIT_LAYERS = [2.0, 3.5, 5.0]   # metres, one per drone slot
+TRANSIT_ARRIVE = 0.4               # m, sub-target arrival threshold
+
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
 # track well on the real hardware WITHOUT making the already-slow ones drag.
@@ -287,7 +295,7 @@ class Drone:
             return False
         return self._set_kill(True)
 
-FDStatus = Enum('FDStatus', [('STAGING', 1), ('GETTING_READY', 2), ('GUIDING', 3), ('FINISHED', 4)])      
+FDStatus = Enum('FDStatus', [('STAGING', 1), ('GETTING_READY', 2), ('GUIDING', 3), ('FINISHED', 4), ('RETURNING', 5)])
 class FlightDirector:
     def __init__(self, trajectories, ids):
         self.trajectories = trajectories
@@ -344,20 +352,76 @@ class FlightDirector:
         if self.status == FDStatus.STAGING:
             if np.all([s == DroneStatus.CONNECTED for s in drone_status]):
                 self.status = FDStatus.GETTING_READY
-                for i in self.ids:
-                  self.acs[i].goto_ref()  
-                logger.debug('all drones connected, moving them to start pos')
+                # height-layered transit to the trajectory start points
+                self.start_transit({i: tuple(float(v) for v in self.acs[i].Yref[:3, 0])
+                                    for i in self.ids})
+                logger.debug('all connected -> layered transit to start')
         elif self.status == FDStatus.GETTING_READY:
-            dist_to_start = [self.acs[i].dist_to_ref() for i in self.ids]
-            if np.max(dist_to_start) < DIST_TO_START_THRESHOLD:
+            if self.transit_step():
                 self.duree_du_show = self.trajectories.trajectory_duration()
                 self.status, self.t0 = FDStatus.GUIDING, time.time()
                 logger.debug('all drones arrived to start, starting the show')
         elif self.status == FDStatus.GUIDING:
             for i in self.ids:
                 self.acs[i].follow_ref()
+        elif self.status == FDStatus.RETURNING:
+            if self.transit_step():
+                self.status = FDStatus.FINISHED
+                logger.debug('all drones back at standby')
         elif self.status == FDStatus.FINISHED:
             pass
+
+    # --- height-layered transit (safe by construction) ------------------
+    def start_transit(self, targets):
+        """Begin a transit to `targets` {ac_id:(x,y,z)}: every drone climbs
+        to its own layer altitude, moves horizontally there (distinct
+        heights -> crossings are safe), then descends to its target. A
+        barrier between phases keeps them layered the whole horizontal move,
+        so it is safe for ANY start positions."""
+        self._transit = {
+            'phase': 'climb',
+            'targets':  {i: tuple(float(v) for v in targets[i]) for i in self.ids},
+            'start_xy': {i: (float(self.acs[i].T[0, 3]), float(self.acs[i].T[1, 3]))
+                         for i in self.ids},
+            'layer':    {i: TRANSIT_LAYERS[k % len(TRANSIT_LAYERS)]
+                         for k, i in enumerate(self.ids)},
+        }
+        for i in self.ids:
+            self.acs[i].take_control()   # ensure Guided once
+        self._transit_send()
+
+    def _transit_target(self, i):
+        t = self._transit
+        sx, sy = t['start_xy'][i]
+        tx, ty, tz = t['targets'][i]
+        lz = t['layer'][i]
+        if t['phase'] == 'climb':  return (sx, sy, lz)   # up to my layer
+        if t['phase'] == 'move':   return (tx, ty, lz)   # across at my layer
+        return (tx, ty, tz)                              # down onto target
+
+    def _transit_send(self):
+        for i in self.ids:
+            self.acs[i].goto_point(self._transit_target(i))
+
+    def transit_step(self):
+        """Resend the current sub-target, advance the phase once EVERY drone
+        has reached it (barrier). Returns True when the whole transit ends."""
+        t = getattr(self, '_transit', None)
+        if t is None:
+            return True
+        self._transit_send()   # (re)send each tick, robust to a dropped goto
+        arrived = all(
+            np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
+                           - np.asarray(self._transit_target(i), dtype=float)) < TRANSIT_ARRIVE
+            for i in self.ids)
+        if not arrived:
+            return False
+        if t['phase'] == 'climb':
+            t['phase'] = 'move';    return False
+        if t['phase'] == 'move':
+            t['phase'] = 'descend'; return False
+        self._transit = None       # descent done
+        return True
 
     def on_pprz_connect(self, conf):
         logger.debug(f'{conf.id} ({conf.name}) connected')
@@ -583,17 +647,16 @@ class Application(QApplication):
         self.operator_view.set_preflight_enabled(False)
 
     def on_stop_clicked(self):
-        # stay in Guided and return to the fixed standby points: a known,
-        # repeatable formation the show can be relaunched from, or LAND
-        # ALL used for a normal landing. NAV is only given back by LAND
-        # ALL (so the flight plan lands) or at app exit.
-        # NOTE testbed caveat: the straight-line returns to standby are
-        # not themselves deconflicted, watch them on the first runs.
-        self.operator_view.log_text('Show stopped: returning to standby (Guided)')
+        # stay in Guided and return to the fixed standby points, via the
+        # height-layered transit (deconflicted, safe from any show position).
+        # RETURNING drives the transit from fd.run(); it ends at FINISHED.
+        self.operator_view.log_text('Show stopped: returning to standby (layered transit)')
         self.is_guiding = False
-        self.fd.status = FDStatus.FINISHED
-        for ac_id in self.fd.ids:
-            self.fd.acs[ac_id].go_standby()
+        targets = {ac_id: (self.fd.acs[ac_id].standby_point
+                           or tuple(float(v) for v in self.fd.acs[ac_id].Yref[:3, 0]))
+                   for ac_id in self.fd.ids}
+        self.fd.start_transit(targets)
+        self.fd.status = FDStatus.RETURNING
         self.operator_view.button_guide.setEnabled(True)
         self.operator_view.button_stop.setEnabled(False)
         self.operator_view.set_preflight_enabled(True)
@@ -677,7 +740,9 @@ class Application(QApplication):
         now = time.time()
         elapsed = now - self.t0
         if elapsed >= self.dt_control:
-            if self.is_guiding:
+            # RETURNING drives the layered return transit from fd.run() even
+            # though the show is no longer guiding
+            if self.is_guiding or self.fd.status == FDStatus.RETURNING:
                 self.fd.run()
             # the drones panel doubles as the pre-flight checklist, so it
             # must live before takeoff, not only while guiding
