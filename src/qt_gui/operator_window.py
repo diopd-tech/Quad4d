@@ -2,7 +2,7 @@
 
 
 import logging
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
                                QGridLayout,
@@ -177,6 +177,24 @@ class OperatorWindow(QMainWindow):
         for i in range(self.model.trajectory_nb()):
             self.tdw.display_new_trajectory(self.model, i, show_details=False,
                                             show_quad=True, show_ref_quad=True)
+        # layer toggle overlaid on the 3D view (like a pprz map layer): show or
+        # hide the volière floor plan. Top-left corner is size-independent, so
+        # no reposition on resize is needed. Checked = plan shown.
+        self.btn_floor = QPushButton("Plan volière", self.tdw)
+        self.btn_floor.setCheckable(True)
+        self.btn_floor.setChecked(True)
+        self.btn_floor.setCursor(Qt.PointingHandCursor)
+        self.btn_floor.setStyleSheet(
+            "QPushButton{background:rgba(30,35,32,0.85);color:#C7D0CB;"
+            "border:1px solid #353D38;border-radius:6px;padding:4px 10px;font-size:12px;}"
+            "QPushButton:hover{background:rgba(43,50,45,0.9);}"
+            "QPushButton:checked{background:rgba(230,247,236,0.92);color:#0E1A12;"
+            "border:1px solid #E6F7EC;}")
+        self.btn_floor.toggled.connect(
+            lambda checked: self.tdw.set_item_visible('floor', checked))
+        self.btn_floor.adjustSize()
+        self.btn_floor.move(10, 10)
+        self.btn_floor.raise_()
         left.addWidget(self.tdw, stretch=1)
         left.addWidget(self._build_console_group())
         body.addLayout(left, stretch=4)
