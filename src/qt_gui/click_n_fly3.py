@@ -68,6 +68,10 @@ TRANSIT_ARRIVE = 0.4               # m, sub-target arrival threshold
 # to the layered climb. Margin > safety to absorb tracking error.
 TRANSIT_DIRECT_MARGIN = 1.3        # m
 TRANSIT_MODEL_SPEED   = 1.0        # m/s, speed assumed for the direct-safe check
+# Lambda-scheduling by departure delay: a lower-priority drone waits at its
+# start until it can fly straight without coming within the margin of an
+# earlier drone -- keeps direct paths, resolves crossings by staggering.
+TRANSIT_MAX_DELAY     = 10.0       # s, give up scheduling past this -> layered
 
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
@@ -398,62 +402,114 @@ class FlightDirector:
                         return False
         return True
 
+    def _schedule_delays(self, targets, margin=TRANSIT_DIRECT_MARGIN,
+                         speed=TRANSIT_MODEL_SPEED, dt=0.1, max_delay=TRANSIT_MAX_DELAY):
+        """Greedy lambda-scheduling by departure delay (priority = drone
+        order): each drone waits at its start until it can fly STRAIGHT to
+        its target without coming within `margin` of any higher-priority
+        drone's already-fixed transit. Returns {ac_id: delay_s}, or None if
+        one can't be placed within max_delay (-> caller falls back to layered)."""
+        P  = {i: np.asarray(self.acs[i].T[:3, 3], dtype=float) for i in self.ids}
+        Tg = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
+        dur = {i: max(np.linalg.norm(Tg[i] - P[i]) / speed, 1e-3) for i in self.ids}
+
+        def pos(i, t, d):                       # drone i, departing at delay d
+            if t <= d: return P[i]              # still holding at its start
+            return P[i] + (Tg[i] - P[i]) * min((t - d) / dur[i], 1.0)
+
+        ids = list(self.ids)
+        delays = {}
+        for k, i in enumerate(ids):
+            placed = False
+            for d in np.arange(0., max_delay + dt, dt):
+                horizon = max([d + dur[i]] + [delays[j] + dur[j] for j in ids[:k]])
+                clash = False
+                for t in np.arange(0., horizon + dt, dt):
+                    for j in ids[:k]:
+                        if np.linalg.norm(pos(i, t, d) - pos(j, t, delays[j])) < margin:
+                            clash = True; break
+                    if clash: break
+                if not clash:
+                    delays[i] = float(d); placed = True; break
+            if not placed:
+                return None
+        return delays
+
     def start_transit(self, targets):
-        """Begin a transit to `targets` {ac_id:(x,y,z)}. If a simultaneous
-        straight-line transit is verified conflict-free, take it directly;
-        otherwise use the height-layered climb (safe by construction). Either
-        way it is safe: we never run an unverified direct transit."""
+        """Begin a transit to `targets` {ac_id:(x,y,z)}. Try, in order:
+        direct (all straight, verified clear), scheduled (straight but
+        departures staggered so a lower-priority drone lets another pass),
+        else layered (climb over -- safe by construction). We never run an
+        unverified transit."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
-        direct = self._direct_transit_safe(targets)
+        delays = None
+        if self._direct_transit_safe(targets):
+            mode = 'direct'
+        else:
+            delays = self._schedule_delays(targets)
+            mode = 'scheduled' if delays is not None else 'layered'
         self._transit = {
-            'mode':  'direct' if direct else 'layered',
-            'phase': 'direct' if direct else 'climb',
-            'targets':  targets,
-            'start_xy': {i: (float(self.acs[i].T[0, 3]), float(self.acs[i].T[1, 3]))
-                         for i in self.ids},
-            'layer':    {i: TRANSIT_LAYERS[k % len(TRANSIT_LAYERS)]
-                         for k, i in enumerate(self.ids)},
+            'mode':  mode,
+            'phase': 'climb',              # layered only
+            'targets':   targets,
+            'start_pos': {i: tuple(float(v) for v in self.acs[i].T[:3, 3])
+                          for i in self.ids},
+            'layer':     {i: TRANSIT_LAYERS[k % len(TRANSIT_LAYERS)]
+                          for k, i in enumerate(self.ids)},
+            'delays':    delays or {},
+            'start_t':   time.time(),
         }
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
-        logger.info(f'transit: {"direct" if direct else "layered (crossing detected)"}')
+        logger.info(f'transit: {mode}' + (f' delays={delays}' if delays else ''))
 
     def _transit_target(self, i):
         t = self._transit
         if t['mode'] == 'direct':
-            return t['targets'][i]                       # straight to target
-        sx, sy = t['start_xy'][i]
+            return t['targets'][i]
+        if t['mode'] == 'scheduled':
+            if (time.time() - t['start_t']) < t['delays'][i]:
+                return t['start_pos'][i]                 # hold until my turn
+            return t['targets'][i]                       # then straight over
+        sx, sy, _ = t['start_pos'][i]                    # layered
         tx, ty, tz = t['targets'][i]
         lz = t['layer'][i]
-        if t['phase'] == 'climb':  return (sx, sy, lz)   # up to my layer
-        if t['phase'] == 'move':   return (tx, ty, lz)   # across at my layer
-        return (tx, ty, tz)                              # down onto target
+        if t['phase'] == 'climb':  return (sx, sy, lz)
+        if t['phase'] == 'move':   return (tx, ty, lz)
+        return (tx, ty, tz)
 
     def _transit_send(self):
         for i in self.ids:
             self.acs[i].goto_point(self._transit_target(i))
 
     def transit_step(self):
-        """Resend the current sub-target, advance once EVERY drone has
-        reached it (barrier). Returns True when the whole transit ends."""
+        """Resend sub-targets; return True when the transit is done. Direct
+        and scheduled finish when everyone is at their FINAL target; layered
+        advances phase by phase behind a barrier."""
         t = getattr(self, '_transit', None)
         if t is None:
             return True
         self._transit_send()   # (re)send each tick, robust to a dropped goto
+        if t['mode'] in ('direct', 'scheduled'):
+            done = all(np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
+                       - np.asarray(t['targets'][i], dtype=float)) < TRANSIT_ARRIVE
+                       for i in self.ids)
+            if done:
+                self._transit = None
+            return done
+        # layered: barrier on the current sub-target
         arrived = all(
             np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
                            - np.asarray(self._transit_target(i), dtype=float)) < TRANSIT_ARRIVE
             for i in self.ids)
         if not arrived:
             return False
-        if t['mode'] == 'direct':
-            self._transit = None; return True            # single hop done
         if t['phase'] == 'climb':
             t['phase'] = 'move';    return False
         if t['phase'] == 'move':
             t['phase'] = 'descend'; return False
-        self._transit = None       # descent done
+        self._transit = None
         return True
 
     def on_pprz_connect(self, conf):
