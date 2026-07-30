@@ -202,13 +202,14 @@ class OperatorWindow(QMainWindow):
         panels.addWidget(self._build_controls_group())
 
         right = QWidget()
-        # FIXED width (not a min/max range): otherwise the column resized as
-        # the metrics line changed digit count (e.g. speed 2 -> 2.1 -> 12.3),
-        # making the whole panel visibly jitter. Sized to the metrics line
-        # plus a small margin for growing values (operator request)
-        right.setFixedWidth(430)
+        # Minimum width (430) so the metrics line always fits, plus a stretch
+        # share so the column GROWS when the window is maximised instead of
+        # staying tiny. The width is driven by the layout (min or stretch
+        # allocation), never by the content, so the digit-count jitter that a
+        # min/max range caused does not come back.
+        right.setMinimumWidth(430)
         right.setLayout(panels)
-        body.addWidget(right, stretch=0)
+        body.addWidget(right, stretch=1)
 
         outer.addLayout(body, stretch=1)
 
