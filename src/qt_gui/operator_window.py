@@ -4,7 +4,7 @@
 import logging
 import os
 from PySide6.QtCore import QTimer, Qt, QSize, QEvent
-from PySide6.QtGui import QPixmap, QPainter, QIcon
+from PySide6.QtGui import QPixmap, QPainter, QIcon, QColor
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
@@ -16,6 +16,19 @@ import view_chronograms as view_chrono
 from live_telemetry import TelemetryRecorder, LiveTelemetryWindow
 
 logger = logging.getLogger(__name__)
+
+
+def _tinted_icon(path, size, color):
+    """Render an SVG to a `size`-px icon recolored to `color` (keeps alpha)."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    QSvgRenderer(path).render(p)
+    p.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    p.fillRect(pm.rect(), QColor(color))
+    p.end()
+    return QIcon(pm)
+
 
 STYLE = """
 
@@ -99,10 +112,10 @@ STYLE = """
 
     QProgressBar {
         background-color: #0E110F; border: 1px solid #2A312D;
-        border-radius: 5px; height: 10px; text-align: center;
-        color: #8B938F; font-size: 11px;
+        border-radius: 5px; min-height: 16px; text-align: center;
+        color: #EAF2EC; font-size: 11px; font-weight: 600;
     }
-    QProgressBar::chunk { background-color: #8B938F; border-radius: 4px; }
+    QProgressBar::chunk { background-color: #2F6B4F; border-radius: 4px; }
 
     QPlainTextEdit {
         background-color: #0E110F; color: #C7D0CB;
@@ -192,17 +205,18 @@ class OperatorWindow(QMainWindow):
         self.btn_floor.setIconSize(QSize(18, 18))
         _layers = os.path.join(os.path.dirname(vtd.__file__),
                                'media', 'pprz_icons', 'layers.svg')
-        _pm = QPixmap(18, 18); _pm.fill(Qt.GlobalColor.transparent)
-        _p = QPainter(_pm); QSvgRenderer(_layers).render(_p); _p.end()
-        self.btn_floor.setIcon(QIcon(_pm))
+        # two tints: light icon on the dark (unchecked) button, dark icon on the
+        # bright (checked) button -- otherwise the icon vanishes on its own bg.
+        self._icon_layers_light = _tinted_icon(_layers, 18, QColor("#C7D0CB"))
+        self._icon_layers_dark  = _tinted_icon(_layers, 18, QColor("#0E1A12"))
+        self.btn_floor.setIcon(self._icon_layers_dark)   # starts checked
         self.btn_floor.setStyleSheet(
             "QPushButton{background:rgba(30,35,32,0.55);border:1px solid #353D38;"
             "border-radius:6px;}"
             "QPushButton:hover{background:rgba(43,50,45,0.75);}"
             "QPushButton:checked{background:rgba(230,247,236,0.85);"
             "border:1px solid #E6F7EC;}")
-        self.btn_floor.toggled.connect(
-            lambda checked: self.tdw.set_item_visible('floor', checked))
+        self.btn_floor.toggled.connect(self._on_floor_toggled)
         self.tdw.installEventFilter(self)   # to keep the button bottom-left
         self._reposition_floor_btn()
         self.btn_floor.raise_()
@@ -293,6 +307,12 @@ class OperatorWindow(QMainWindow):
         """Keep the layers toggle pinned to the 3D view's bottom-left corner."""
         m = 10
         self.btn_floor.move(m, self.tdw.height() - self.btn_floor.height() - m)
+
+    def _on_floor_toggled(self, checked):
+        self.tdw.set_item_visible('floor', checked)
+        # dark icon on the bright checked button, light icon on the dark one
+        self.btn_floor.setIcon(self._icon_layers_dark if checked
+                               else self._icon_layers_light)
 
     def eventFilter(self, obj, event):
         if obj is self.tdw and event.type() == QEvent.Resize:
