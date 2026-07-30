@@ -2,7 +2,10 @@
 
 
 import logging
-from PySide6.QtCore import QTimer, Qt
+import os
+from PySide6.QtCore import QTimer, Qt, QSize, QEvent
+from PySide6.QtGui import QPixmap, QPainter, QIcon
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
                                QGridLayout,
@@ -177,23 +180,31 @@ class OperatorWindow(QMainWindow):
         for i in range(self.model.trajectory_nb()):
             self.tdw.display_new_trajectory(self.model, i, show_details=False,
                                             show_quad=True, show_ref_quad=True)
-        # layer toggle overlaid on the 3D view (like a pprz map layer): show or
-        # hide the volière floor plan. Top-left corner is size-independent, so
-        # no reposition on resize is needed. Checked = plan shown.
-        self.btn_floor = QPushButton("Plan volière", self.tdw)
+        # layers toggle overlaid on the 3D view (like a pprz map layer): a
+        # compact icon button that shows/hides the volière floor plan. Kept in
+        # the bottom-left corner, repositioned on resize (see eventFilter).
+        self.btn_floor = QPushButton(self.tdw)
         self.btn_floor.setCheckable(True)
         self.btn_floor.setChecked(True)
+        self.btn_floor.setToolTip("Plan volière")
         self.btn_floor.setCursor(Qt.PointingHandCursor)
+        self.btn_floor.setFixedSize(30, 30)
+        self.btn_floor.setIconSize(QSize(18, 18))
+        _layers = os.path.join(os.path.dirname(vtd.__file__),
+                               'media', 'pprz_icons', 'layers.svg')
+        _pm = QPixmap(18, 18); _pm.fill(Qt.GlobalColor.transparent)
+        _p = QPainter(_pm); QSvgRenderer(_layers).render(_p); _p.end()
+        self.btn_floor.setIcon(QIcon(_pm))
         self.btn_floor.setStyleSheet(
-            "QPushButton{background:rgba(30,35,32,0.85);color:#C7D0CB;"
-            "border:1px solid #353D38;border-radius:6px;padding:4px 10px;font-size:12px;}"
-            "QPushButton:hover{background:rgba(43,50,45,0.9);}"
-            "QPushButton:checked{background:rgba(230,247,236,0.92);color:#0E1A12;"
+            "QPushButton{background:rgba(30,35,32,0.55);border:1px solid #353D38;"
+            "border-radius:6px;}"
+            "QPushButton:hover{background:rgba(43,50,45,0.75);}"
+            "QPushButton:checked{background:rgba(230,247,236,0.85);"
             "border:1px solid #E6F7EC;}")
         self.btn_floor.toggled.connect(
             lambda checked: self.tdw.set_item_visible('floor', checked))
-        self.btn_floor.adjustSize()
-        self.btn_floor.move(10, 10)
+        self.tdw.installEventFilter(self)   # to keep the button bottom-left
+        self._reposition_floor_btn()
         self.btn_floor.raise_()
         left.addWidget(self.tdw, stretch=1)
         left.addWidget(self._build_console_group())
@@ -277,6 +288,16 @@ class OperatorWindow(QMainWindow):
             self._live_telemetry_win.close()
         self.app.on_quit()
         event.accept()
+
+    def _reposition_floor_btn(self):
+        """Keep the layers toggle pinned to the 3D view's bottom-left corner."""
+        m = 10
+        self.btn_floor.move(m, self.tdw.height() - self.btn_floor.height() - m)
+
+    def eventFilter(self, obj, event):
+        if obj is self.tdw and event.type() == QEvent.Resize:
+            self._reposition_floor_btn()
+        return super().eventFilter(obj, event)
 
     def _build_header(self):
         # title + subtitle on the left, and the Scenario / View menus as
