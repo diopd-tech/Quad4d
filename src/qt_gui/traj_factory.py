@@ -488,26 +488,25 @@ class ShowRosetteC(p_mt.Circle):
 # --- Tornado: 3 concentric rings, distinct radii AND heights -> swirling tower.
 #     Min separation >= radial gap (1m) AND vertical gap (0.8m), independent of phase.
 class ShowTornadoInner(p_mt.Circle):
-    name, desc = 'show tornado inner', 'concentric ring r=1.5 z=1.8 v=1.7'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r=1.5, v=1.7, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado inner', 'concentric ring r=1.5 z=1.5 v=1.7'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.5], r=1.5, v=1.7, psit=p_t1d.CstOne(0))
 class ShowTornadoMid(p_mt.Circle):
-    name, desc = 'show tornado mid', 'concentric ring r=2.5 z=2.6 v=2.0'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,2.6], r=2.5, v=2.0, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado mid', 'concentric ring r=2.5 z=3.0 v=2.0'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.0], r=2.5, v=2.0, psit=p_t1d.CstOne(0))
 class ShowTornadoOuter(p_mt.Circle):
-    name, desc = 'show tornado outer', 'concentric ring r=3 z=3.8 v=2.5'
-    # r shrunk 3.5->3 for the +/-3m envelope; raised z 3.4->3.8 to keep
-    # >1.2m 3D separation from the mid ring (r=2.5, z=2.6)
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.8], r=3., v=2.5, psit=p_t1d.CstOne(0))
+    name, desc = 'show tornado outer', 'concentric ring r=3 z=4.5 v=2.5'
+    # wider vertical spread (1.5m gaps) so the tower is clearly stacked
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,4.5], r=3., v=2.5, psit=p_t1d.CstOne(0))
 
 
 # --- Counter-rotating twin rings: same circle, OPPOSITE direction (r sign),
-#     separated in height (1.4m) so the crossing points never collide.
+#     well separated in height (2.5m) so the stacked rings read clearly.
 class ShowTwinLow(p_mt.Circle):
-    name, desc = 'show twin ring low', 'r=2 v=2 z=1.8 CCW'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.8], r= 2., v=2., psit=p_t1d.CstOne(0))
+    name, desc = 'show twin ring low', 'r=2 v=2 z=1.5 CCW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,1.5], r= 2., v=2., psit=p_t1d.CstOne(0))
 class ShowTwinHigh(p_mt.Circle):
-    name, desc = 'show twin ring high', 'r=2 v=2 z=3.2 CW'
-    def __init__(self): p_mt.Circle.__init__(self, [0,0,3.2], r=-2., v=2., psit=p_t1d.CstOne(0))
+    name, desc = 'show twin ring high', 'r=2 v=2 z=4.0 CW'
+    def __init__(self): p_mt.Circle.__init__(self, [0,0,4.0], r=-2., v=2., psit=p_t1d.CstOne(0))
 
 
 # --- Pulsing ring: rosette + shared sine height -> 3 drones bob together while
