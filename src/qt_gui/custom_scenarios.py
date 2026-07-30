@@ -35,6 +35,32 @@ def load_recent_names(path=RECENT_PATH):
     return [str(n) for n in names][:RECENT_MAX]
 
 
+FLEET_PATH = os.path.join(os.path.dirname(__file__), 'data', 'fleet_ids.yaml')
+
+
+def load_fleet_ids(path=FLEET_PATH):
+    """The operator's last per-slot drone ids, so changing scenario keeps the
+    same mapping instead of resetting to the defaults."""
+    try:
+        with open(path) as f:
+            ids = yaml.safe_load(f) or []
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        logger.warning(f'fleet ids file unreadable, ignoring it: {e}')
+        return []
+    return [int(i) for i in ids]
+
+
+def save_fleet_ids(ids, path=FLEET_PATH):
+    """Remember the per-slot ids; merge with what's stored so editing a
+    2-drone scenario keeps the 3rd slot set from a previous 3-drone one."""
+    merged = list(ids) + load_fleet_ids(path)[len(ids):]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        yaml.safe_dump([int(i) for i in merged], f, sort_keys=False)
+
+
 def save_recent_name(name, path=RECENT_PATH, max_n=RECENT_MAX):
     """Record a scenario as just launched (dedup, most recent first)."""
     names = [n for n in load_recent_names(path) if n != name]

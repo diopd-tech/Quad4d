@@ -3,3 +3,4 @@ __pycache__/
 # operator-composed scenarios and recent-scenario history are per-machine user data
 src/qt_gui/data/custom_scenarios.yaml
 src/qt_gui/data/recent_scenarios.yaml
+src/qt_gui/data/fleet_ids.yaml

@@ -3,6 +3,7 @@
 import logging
 from custom_scenarios import (load_custom_scenarios, save_custom_scenario,
                               load_recent_names, save_recent_name,
+                              load_fleet_ids, save_fleet_ids,
                               CustomScenarioDialog)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -77,6 +78,9 @@ class ScenarioPickerDialog(QDialog):
         super().__init__(parent)
         predefined = list(scenarios)
         self._id_spins = []
+        # per-slot ids the operator last used, to keep the same mapping when
+        # switching scenarios instead of resetting to each scenario's default
+        self._fleet_ids = load_fleet_ids()
         # per list-row lookup: the scenario class, or None for a group
         # header row (headers are non-selectable dividers)
         self._row_scenario = []
@@ -219,11 +223,13 @@ class ScenarioPickerDialog(QDialog):
         cls = self._row_scenario[row]
         if cls is None:                 # a group header, nothing to show
             return
-        for _id, traj in zip(cls.ids, cls.trajs):
+        for i, (_id, traj) in enumerate(zip(cls.ids, cls.trajs)):
             row_box = QHBoxLayout()
             spin = QSpinBox()
             spin.setRange(0, 999)
-            spin.setValue(_id)
+            # keep the operator's last per-slot id if there is one, else the
+            # scenario's default
+            spin.setValue(self._fleet_ids[i] if i < len(self._fleet_ids) else _id)
             spin.setFixedWidth(70)
             traj_lbl = QLabel(traj)
             traj_lbl.setObjectName("scenInfo")
@@ -240,6 +246,7 @@ class ScenarioPickerDialog(QDialog):
         cls = self._row_scenario[self.list.currentRow()]
         save_recent_name(cls.__name__)   # remember it for the RECENT group
         ids = [spin.value() for spin in self._id_spins]
+        save_fleet_ids(ids)              # keep this mapping for the next change
         return ScenarioResult(
             name=cls.__name__,
             desc=getattr(cls, "desc", None),
