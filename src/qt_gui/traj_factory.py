@@ -616,18 +616,23 @@ class ScaraRace(p_mt.CompositeTraj):
 
 
 def _spirale_montante(a0):
-    r, v, N = 2., 2., 2;   om = v/r;  om_z = om/(2*N)   # N tours pour monter
-    return p_mt.Circle([0,0,4.], r=r, v=v, alpha0=a0,
-                       psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=4., a=2.5, om=om_z))
+    # N tours a `spacing` m d'ecart vertical ; depart bas pour rester sous
+    # le plafond : montee totale = spacing*N, sommet = z_min + spacing*N
+    r, v, N, spacing, z_min = 2., 2., 3, 1.8, 1.0
+    om = v/r;  om_z = om/(2*N)
+    a = spacing*N/2.        # amplitude pour l'ecart par tour voulu
+    c = z_min + a           # bas de l'oscillation a z_min (sommet a z_min+2a)
+    return p_mt.Circle([0,0,c], r=r, v=v, alpha0=a0,
+                       psit=p_t1d.CstOne(0), zt=p_t1d.SinOne(c=c, a=a, om=om_z))
 
 class SpiraleMontanteA(ClosedLoop):
-    name, desc = 'spirale montante a', 'helice 1/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    name, desc = 'spirale montante a', 'helice 1/3 : r=2 v=2, 120 deg, monte en 3 tours (ecart 1.8m) puis redescend'
     def __init__(self): super().__init__(_spirale_montante(0.))
 class SpiraleMontanteB(ClosedLoop):
-    name, desc = 'spirale montante b', 'helice 2/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    name, desc = 'spirale montante b', 'helice 2/3 : r=2 v=2, 120 deg, monte en 3 tours (ecart 1.8m) puis redescend'
     def __init__(self): super().__init__(_spirale_montante(2*np.pi/3))
 class SpiraleMontanteC(ClosedLoop):
-    name, desc = 'spirale montante c', 'helice 3/3 : r=2 v=2, 120 deg, monte en 2 tours puis redescend en douceur'
+    name, desc = 'spirale montante c', 'helice 3/3 : r=2 v=2, 120 deg, monte en 3 tours (ecart 1.8m) puis redescend'
     def __init__(self): super().__init__(_spirale_montante(4*np.pi/3))
 
 
