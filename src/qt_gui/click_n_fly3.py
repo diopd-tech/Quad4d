@@ -372,60 +372,85 @@ class FlightDirector:
         elif self.status == FDStatus.FINISHED:
             pass
 
-    # --- transit deconfliction: lambda-scheduling by departure delay ----
-    def _schedule_delays(self, targets, margin=TRANSIT_MARGIN,
-                         speed=TRANSIT_MODEL_SPEED, dt=0.1, max_delay=TRANSIT_MAX_DELAY):
-        """Priority = drone order. Each drone waits at its start until it can
-        fly STRAIGHT to its target without coming within `margin` of any
-        higher-priority drone's already-fixed transit (its holding period is
-        included). Returns {ac_id: delay_s}, capped at max_delay (with a
-        warning) if it can't fully clear."""
-        P  = {i: np.asarray(self.acs[i].T[:3, 3], dtype=float) for i in self.ids}
-        Tg = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
+    # --- transit deconfliction: lambda-scheduling with a mid-path hold ---
+    def _schedule_holds(self, targets, margin=TRANSIT_MARGIN,
+                        speed=TRANSIT_MODEL_SPEED, dt=0.1, max_delay=TRANSIT_MAX_DELAY):
+        """Priority = drone order (drone 0 never yields). Each lower-priority
+        drone flies STRAIGHT toward its target but, rather than wait parked at
+        its start, it advances to the last safe point on its line (the 'gate')
+        just before it would come within `margin` of a higher-priority drone,
+        holds there while that drone passes, then continues. Returns
+        {ac_id: (gate_point, resume_t)}: command the gate until resume_t, then
+        the target. resume_t is capped at max_delay (with a warning)."""
+        P   = {i: np.asarray(self.acs[i].T[:3, 3], dtype=float) for i in self.ids}
+        Tg  = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
         dur = {i: max(np.linalg.norm(Tg[i] - P[i]) / speed, 1e-3) for i in self.ids}
-
-        def pos(i, t, d):                       # drone i, departing at delay d
-            if t <= d: return P[i]              # still holding at its start
-            return P[i] + (Tg[i] - P[i]) * min((t - d) / dur[i], 1.0)
-
         ids = list(self.ids)
-        delays = {}
+        horizon = 2 * max(dur.values()) + max_delay + 1.0
+        sched = {}                              # i -> (s_hold, wait) in seconds
+
+        def pos(i, t, s_hold, wait):            # drone i at time t under its schedule
+            if t <= s_hold:      frac = t / dur[i]                 # heading to the gate
+            elif t <= s_hold + wait: frac = s_hold / dur[i]        # holding at the gate
+            else:                frac = (t - wait) / dur[i]        # resumed to target
+            return P[i] + (Tg[i] - P[i]) * min(frac, 1.0)
+
+        def first_clash(i, s_hold, wait):       # earliest t drone i clashes with a fixed j, or None
+            for t in np.arange(0., horizon + dt, dt):
+                pi = pos(i, t, s_hold, wait)
+                for j in sched:
+                    if np.linalg.norm(pi - pos(j, t, *sched[j])) < margin:
+                        return float(t)
+            return None
+
         for k, i in enumerate(ids):
-            chosen = None
-            for d in np.arange(0., max_delay + dt, dt):
-                horizon = max([d + dur[i]] + [delays[j] + dur[j] for j in ids[:k]])
-                clash = any(np.linalg.norm(pos(i, t, d) - pos(j, t, delays[j])) < margin
-                            for t in np.arange(0., horizon + dt, dt) for j in ids[:k])
-                if not clash:
-                    chosen = float(d); break
-            if chosen is None:
-                chosen = float(max_delay)
+            if k == 0 or first_clash(i, dur[i], 0.) is None:
+                sched[i] = (dur[i], 0.)                 # nothing higher -> fly straight
+                continue
+            t1 = first_clash(i, dur[i], 0.)
+            s_hold = 0.                                 # walk the gate back to the latest safe point
+            for tb in np.arange(t1, -dt, -dt):
+                tb = max(float(tb), 0.)
+                if first_clash(i, tb, horizon) is None:  # hold here forever -> clear?
+                    s_hold = tb; break
+            wait = max_delay                           # find the earliest safe resume
+            for r in np.arange(s_hold, s_hold + max_delay + dt, dt):
+                if first_clash(i, s_hold, float(r) - s_hold) is None:
+                    wait = float(r) - s_hold; break
+            else:
                 logger.warning(f'transit: drone {i} not cleared within {max_delay}s')
-            delays[i] = chosen
-        return delays
+            sched[i] = (s_hold, wait)
+
+        out = {}
+        for i in ids:
+            s_hold, wait = sched[i]
+            gate = tuple(P[i] + (Tg[i] - P[i]) * min(s_hold / dur[i], 1.0))
+            out[i] = (gate, s_hold + wait)             # (gate_point, resume time)
+        return out
 
     def start_transit(self, targets):
         """Begin the deconflicted transit to `targets` {ac_id:(x,y,z)}: every
-        drone flies STRAIGHT to its target, but lower-priority ones wait at
-        their start (staggered departures) so no two cross within the margin."""
+        drone flies STRAIGHT to its target; lower-priority ones hold on their
+        line at the gate until the higher-priority ones have passed."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
         self._transit = {
             'targets':   targets,
-            'start_pos': {i: tuple(float(v) for v in self.acs[i].T[:3, 3])
-                          for i in self.ids},
-            'delays':    self._schedule_delays(targets),
+            'sched':     self._schedule_holds(targets),   # i -> (gate_point, resume_t)
             'start_t':   time.time(),
         }
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
-        logger.info(f"transit: delays={self._transit['delays']}")
+        logger.info("transit: " + ", ".join(
+            f"{i}:hold@{tuple(round(v,2) for v in g)}->{r:.1f}s"
+            for i, (g, r) in self._transit['sched'].items()))
 
     def _transit_target(self, i):
         t = self._transit
-        if (time.time() - t['start_t']) < t['delays'][i]:
-            return t['start_pos'][i]        # hold at start until my turn
-        return t['targets'][i]              # then straight to target
+        gate, resume_t = t['sched'][i]
+        if (time.time() - t['start_t']) < resume_t:
+            return gate                     # advance to the gate and hold there
+        return t['targets'][i]              # then continue to target
 
     def _transit_send(self):
         for i in self.ids:
