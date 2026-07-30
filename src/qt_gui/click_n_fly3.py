@@ -353,10 +353,10 @@ class FlightDirector:
         if self.status == FDStatus.STAGING:
             if np.all([s == DroneStatus.CONNECTED for s in drone_status]):
                 self.status = FDStatus.GETTING_READY
-                # height-layered transit to the trajectory start points
+                # deconflicted transit (staggered departures) to the starts
                 self.start_transit({i: tuple(float(v) for v in self.acs[i].Yref[:3, 0])
                                     for i in self.ids})
-                logger.debug('all connected -> layered transit to start')
+                logger.debug('all connected -> deconflicted transit to start')
         elif self.status == FDStatus.GETTING_READY:
             if self.transit_step():
                 self.duree_du_show = self.trajectories.trajectory_duration()
