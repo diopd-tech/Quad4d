@@ -615,6 +615,10 @@ class OperatorWindow(QMainWindow):
         self._update_scenario_labels(scenario)
         self._refresh_chronograms()
         self.telemetry_recorder.reset(fd.ids)
+        # every scenario change resets the show speed back to x1.0
+        self.fd.speed_target = 1.0
+        self.speed_slider.setValue(100)
+        self.speed_value.setText("×1.0")
         # kill buttons live in the drones panel now, rebuilt with it in
         # _replace_drones_panel
         self._reset_controls()
