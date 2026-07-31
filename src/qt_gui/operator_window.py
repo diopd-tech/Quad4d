@@ -509,6 +509,12 @@ class OperatorWindow(QMainWindow):
         self.speed_slider.setSingleStep(5)
         self.speed_slider.setPageStep(10)
         self.speed_slider.setCursor(Qt.PointingHandCursor)
+        self.speed_slider.setStyleSheet(
+            "QSlider::groove:horizontal{height:4px;background:#2A312D;border-radius:2px;}"
+            "QSlider::sub-page:horizontal{background:#8B938F;border-radius:2px;}"
+            "QSlider::handle:horizontal{background:#8B938F;border:1px solid #353D38;"
+            "width:14px;margin:-6px 0;border-radius:7px;}"
+            "QSlider::handle:horizontal:hover{background:#C7D0CB;}")
         self.speed_value = QLabel("×1.0")
         self.speed_value.setMinimumWidth(34)
         self.speed_slider.valueChanged.connect(self._on_speed_changed)
