@@ -8,7 +8,7 @@ from PySide6.QtGui import QPixmap, QPainter, QIcon, QColor
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
-                               QGridLayout,
+                               QGridLayout, QSlider,
                                QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
 from drones_panel import DronesPanel
 import view_three_d as vtd
@@ -495,7 +495,33 @@ class OperatorWindow(QMainWindow):
             grid.addWidget(self.button_land_all,       2, 0, 1, 2)
         v.addLayout(grid)
         v.addWidget(self.progress)
+
+        # live show-speed factor: scales the WHOLE show uniformly (all drones
+        # together), so choreography sync and deconfliction are preserved. It
+        # can be moved during the show too -- the FD eases the factor and
+        # rescales the feedforward, so the reference never jumps.
+        speed_row = QHBoxLayout()
+        speed_row.setSpacing(8)
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setMinimum(50)     # x0.5
+        self.speed_slider.setMaximum(150)    # x1.5
+        self.speed_slider.setValue(100)      # x1.0
+        self.speed_slider.setSingleStep(5)
+        self.speed_slider.setPageStep(10)
+        self.speed_slider.setCursor(Qt.PointingHandCursor)
+        self.speed_value = QLabel("×1.0")
+        self.speed_value.setMinimumWidth(34)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        speed_row.addWidget(QLabel("Vitesse"))
+        speed_row.addWidget(self.speed_slider, 1)
+        speed_row.addWidget(self.speed_value)
+        v.addLayout(speed_row)
         return group
+
+    def _on_speed_changed(self, value):
+        factor = value / 100.0
+        self.speed_value.setText(f"×{factor:.1f}")
+        self.fd.speed_target = factor
 
     def _kill_cbk(self):
         """Callback the drones panel wires to each row's kill button;

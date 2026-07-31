@@ -67,6 +67,12 @@ TRANSIT_ARRIVE = 0.4    # m, target arrival threshold
 # Adaptive per trajectory -- one knob. Airframe REF_MAX_SPEED is 2.5 m/s.
 TARGET_MAX_SPEED = 1.5   # m/s
 
+# Live show-speed factor (HMI slider): the show clock advances at this factor
+# and the feedforward is rescaled accordingly, uniformly for every drone (keeps
+# sync and deconfliction). The factor is eased toward the slider value over
+# ~SPEED_SMOOTH_TAU so a slider move never jerks the drones.
+SPEED_SMOOTH_TAU = 1.0   # s
+
 # --- lambda-scheduling tuning (see spatial_deconfliction.py) -----------
 SCHED_SAFETY_DIST   = 1.0   # m, pairwise distance defining a conflict
 SCHED_STANDOFF      = 0.15  # m, extra buffer over safety for the parked drone:
@@ -314,6 +320,9 @@ class FlightDirector:
         self.known_confs = {}  # every conf ever seen, even for ids not currently in acs
         self.t0 = 0.
         self.duree_du_show = self.trajectories.trajectory_duration()  #POur avoir la durée du show
+        self.show_t = 0.          # accumulated show-time (advances during GUIDING)
+        self.speed_target = 1.0   # global speed factor requested from the HMI
+        self.speed_s = 1.0        # eased factor actually applied (avoids jerk)
         
     def on_pprz_external_pose(self, sender, msg):
         pos_enu = [msg[_c] for _c in ['enu_x', 'enu_y', 'enu_z']]
@@ -328,13 +337,19 @@ class FlightDirector:
         ac.t_last_ext_pose = time.time()
         ac.set_pose(T)
 
-    def run(self): # for now called from GUI thread, maybe use our own thread?
+    def run(self, dt=0.05): # for now called from GUI thread, maybe use our own thread?
         if self.status == FDStatus.STAGING or self.status == FDStatus.GETTING_READY:
             elapsed = 0.
+        elif self.status == FDStatus.GUIDING:
+            # advance the show clock at the (eased) global speed factor: a live
+            # speed change never jumps the reference position, only the rate
+            # going forward. Uniform for every drone -> sync & deconfliction
+            # preserved. Feedforward is rescaled below to match the new rate.
+            self.speed_s += (self.speed_target - self.speed_s) * min(dt / SPEED_SMOOTH_TAU, 1.0)
+            self.show_t += self.speed_s * dt
+            elapsed = self.show_t % self.duree_du_show
         else:
             elapsed = time.time() - self.t0
-        if self.status == FDStatus.GUIDING:
-            elapsed = elapsed % self.duree_du_show
 
         for idx_traj, id_ac in enumerate(self.ids): # compute reference pose
             traj = self.trajectories.get_trajectory(idx_traj)
@@ -343,6 +358,11 @@ class FlightDirector:
             # with a 20s course) used to teleport mid-lap at the global wrap
             t_traj = elapsed % traj.duration if traj.duration > 0 else elapsed
             Yref = traj.get(t_traj)
+            if self.status == FDStatus.GUIDING and self.speed_s != 1.0:
+                # d-th time-derivative scales as speed_s**d (vel x s, accel x s^2...)
+                Yref = np.array(Yref, dtype=float, copy=True)
+                for d in range(1, Yref.shape[1]):
+                    Yref[:, d] *= self.speed_s ** d
             Tref = np.eye(4); Tref[:3,3] = Yref[:3,0]
             self.acs[id_ac].set_ref(Tref, Yref)
         drone_status = [self.acs[_id].status for _id in self.ids]
@@ -357,6 +377,7 @@ class FlightDirector:
             if self.transit_step():
                 self.duree_du_show = self.trajectories.trajectory_duration()
                 self.status, self.t0 = FDStatus.GUIDING, time.time()
+                self.show_t, self.speed_s = 0., self.speed_target  # start fresh
                 logger.debug('all drones arrived to start, starting the show')
         elif self.status == FDStatus.GUIDING:
             for i in self.ids:
@@ -722,7 +743,7 @@ class Application(QApplication):
             # RETURNING drives the deconflicted return transit from fd.run()
             # even though the show is no longer guiding
             if self.is_guiding or self.fd.status == FDStatus.RETURNING:
-                self.fd.run()
+                self.fd.run(self.dt_control)
             # the drones panel doubles as the pre-flight checklist, so it
             # must live before takeoff, not only while guiding
             self.operator_view.drones_panel.update_from_fd(self.fd)
@@ -795,7 +816,7 @@ class Application(QApplication):
             self._batt_landing = False
 
         if self.is_guiding and self.fd.status == FDStatus.GUIDING:
-            loop_elapsed = (time.time() - self.fd.t0) % self.fd.duree_du_show
+            loop_elapsed = self.fd.show_t % self.fd.duree_du_show
             progress_percent= int((loop_elapsed / self.fd.duree_du_show) * 100)
             self.operator_view.show_progress(progress_percent)
 
