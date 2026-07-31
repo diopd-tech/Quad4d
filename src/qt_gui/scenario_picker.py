@@ -147,7 +147,7 @@ class ScenarioPickerDialog(QDialog):
 
         # preselect is an index into the scenarios passed in; map it to the
         # grouped list and fall back to the first selectable row
-        target = predefined[preselect] if 0 <= preselect < len(predefined) else None
+        target = self._predefined[preselect] if 0 <= preselect < len(self._predefined) else None
         self._select_scenario(target)
 
     def _confirm_selection(self, item):
