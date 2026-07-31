@@ -247,6 +247,30 @@ class OperatorWindow(QMainWindow):
         self.btn_floor.toggled.connect(self._on_floor_toggled)
         self.tdw.installEventFilter(self)   # to keep the button bottom-left
         self._reposition_floor_btn()
+
+        # 3D view layers submenu in the operator View menu (grid / arena /
+        # frames / volière plan), same as the editor. Only items the current
+        # 3D view actually has are listed (arena is scenario-dependent). The
+        # floor toggle is kept in sync with the corner icon button above.
+        self.view_menu.addSeparator()
+        three_d_menu = self.view_menu.addMenu("3D view")
+        for label, key in [('Show Grid', 'grid'),
+                           ('Show Arena Boundaries', 'arena'),
+                           ('Show Frames', 'frames'),
+                           ('Show Volière Plan', 'floor')]:
+            if key not in self.tdw.scene_items:
+                continue
+            act = three_d_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(self.tdw.is_item_visible(key))
+            if key == 'floor':
+                self.act_floor = act
+                # let the icon button do the work; setChecked is a no-op when
+                # already in that state, so the two stay in sync without looping
+                act.toggled.connect(self.btn_floor.setChecked)
+            else:
+                act.toggled.connect(
+                    lambda checked, k=key: self.tdw.set_item_visible(k, checked))
         self.btn_floor.raise_()
         left.addWidget(self.tdw, stretch=1)
         left.addWidget(self._build_console_group())
@@ -341,6 +365,9 @@ class OperatorWindow(QMainWindow):
         # dark icon on the bright checked button, light icon on the dark one
         self.btn_floor.setIcon(self._icon_layers_dark if checked
                                else self._icon_layers_light)
+        # keep the View > 3D view menu entry in sync (no-op if unchanged)
+        if hasattr(self, 'act_floor'):
+            self.act_floor.setChecked(checked)
 
     def eventFilter(self, obj, event):
         if obj is self.tdw and event.type() == QEvent.Resize:
