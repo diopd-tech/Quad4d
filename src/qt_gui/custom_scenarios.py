@@ -116,6 +116,21 @@ def save_custom_scenario(name, desc, ids, trajs, path=DEFAULT_PATH):
     logger.info(f"custom scenario '{name}' saved to {path}")
 
 
+def delete_custom_scenario(name, path=DEFAULT_PATH):
+    """Remove the custom scenario named `name` (no-op if absent)."""
+    try:
+        with open(path) as f:
+            entries = yaml.safe_load(f) or []
+    except FileNotFoundError:
+        return
+    kept = [e for e in entries if e.get('name') != name]
+    if len(kept) == len(entries):
+        return
+    with open(path, 'w') as f:
+        yaml.safe_dump(kept, f, allow_unicode=True, sort_keys=False)
+    logger.info(f"custom scenario '{name}' deleted from {path}")
+
+
 # same monochrome look as the scenario picker (kept local to avoid a
 # circular import: scenario_picker imports this module)
 STYLE = """
@@ -170,12 +185,15 @@ class CustomScenarioDialog(QDialog):
 
     On accept, self.result_scenario holds (name, desc, ids, trajs)."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial=None):
+        """`initial`, if given, is (name, ids, trajs) to pre-fill the form
+        (used to Modify or Duplicate an existing scenario)."""
         super().__init__(parent)
         self.setWindowTitle("Click'n Fly - Compose custom scenario")
         self.resize(820, 520)
         self.result_scenario = None
         self._rows = []   # list of dicts: {widget, spin, traj}
+        self._initial = initial
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 14, 14, 14)
@@ -249,6 +267,14 @@ class CustomScenarioDialog(QDialog):
         outer.addLayout(buttons)
 
         self.setStyleSheet(STYLE)
+
+        # pre-fill from an existing scenario (Modify / Duplicate)
+        if initial is not None:
+            init_name, init_ids, init_trajs = initial
+            self.name_edit.setText(str(init_name))
+            for _id, tname in zip(init_ids, init_trajs):
+                self._add_row(tname)
+                self._rows[-1]['spin'].setValue(int(_id))
 
     # --- library side -------------------------------------------------
     def _apply_filter(self, text):

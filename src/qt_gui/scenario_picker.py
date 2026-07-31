@@ -2,6 +2,7 @@
 
 import logging
 from custom_scenarios import (load_custom_scenarios, save_custom_scenario,
+                              delete_custom_scenario,
                               load_recent_names, save_recent_name,
                               load_fleet_ids, save_fleet_ids,
                               CustomScenarioDialog)
@@ -9,7 +10,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QDialog, QWidget, QLabel, QPushButton, QSpinBox,
                                QVBoxLayout, QHBoxLayout, QListWidget,
-                               QListWidgetItem, QGroupBox, QScrollArea)
+                               QListWidgetItem, QGroupBox, QScrollArea,
+                               QMenu, QMessageBox)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ class ScenarioPickerDialog(QDialog):
 
     def __init__(self, scenarios, preselect=0, parent=None):
         super().__init__(parent)
-        predefined = list(scenarios)
+        self._predefined = list(scenarios)
         self._id_spins = []
         # per-slot ids the operator last used, to keep the same mapping when
         # switching scenarios instead of resetting to each scenario's default
@@ -100,27 +102,17 @@ class ScenarioPickerDialog(QDialog):
         body.setSpacing(10)
 
         self.list = QListWidget()
-        # grouped for practicability: the last launched shows first (quick
-        # re-run), then conflict-free shows, the deconfliction testbeds, and
-        # the operator's saved custom ones
-        customs = load_custom_scenarios()
-        by_name = {c.__name__: c for c in predefined}
-        for c in customs:
-            by_name.setdefault(c.__name__, c)   # customs don't shadow predefined
-        recent = [by_name[n] for n in load_recent_names() if n in by_name]
-        no_conflict = [c for c in predefined if not getattr(c, "conflict", False)]
-        conflict    = [c for c in predefined if getattr(c, "conflict", False)]
-        self._add_group("RECENT", recent)
-        self._add_group("NO CONFLICT", no_conflict)
-        self._add_group("WITH CONFLICT", conflict)
-        self._add_group("CUSTOM", customs)
-        self._custom_header_added = bool(customs)
+        self._populate_list()
         self.list.setMinimumWidth(300)
         self.list.currentRowChanged.connect(self._on_selection_changed)
         # confirm the selection with a double-click or Enter (itemActivated
         # fires on the Return key under X11), not only the Start button
         self.list.itemDoubleClicked.connect(self._confirm_selection)
         self.list.itemActivated.connect(self._confirm_selection)
+        # right-click a scenario for Modify/Duplicate/Delete (custom) or
+        # Duplicate as custom (predefined)
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._on_context_menu)
         body.addWidget(self.list, stretch=1)
 
         self.detail_group = QGroupBox("DRONES")
@@ -165,6 +157,25 @@ class ScenarioPickerDialog(QDialog):
         if 0 <= row < len(self._row_scenario) and self._row_scenario[row] is not None:
             self.accept()
 
+    def _populate_list(self):
+        """(Re)build the grouped scenario list from the predefined set and the
+        saved customs. Safe to call again after add/modify/delete."""
+        self.list.clear()
+        self._row_scenario = []
+        customs = load_custom_scenarios()
+        self._custom_names = {c.__name__ for c in customs}
+        by_name = {c.__name__: c for c in self._predefined}
+        for c in customs:
+            by_name.setdefault(c.__name__, c)   # customs don't shadow predefined
+        recent = [by_name[n] for n in load_recent_names() if n in by_name]
+        no_conflict = [c for c in self._predefined if not getattr(c, "conflict", False)]
+        conflict    = [c for c in self._predefined if getattr(c, "conflict", False)]
+        self._add_group("RECENT", recent)
+        self._add_group("NO CONFLICT", no_conflict)
+        self._add_group("WITH CONFLICT", conflict)
+        self._add_group("CUSTOM", customs)
+        self._custom_header_added = bool(customs)
+
     def _add_header(self, text):
         item = QListWidgetItem(text)
         item.setFlags(Qt.ItemFlag.NoItemFlags)      # a divider, not selectable
@@ -182,8 +193,11 @@ class ScenarioPickerDialog(QDialog):
             self._row_scenario.append(cls)
 
     def _select_scenario(self, cls):
-        """Select the row for a scenario class, else the first selectable row."""
-        row = self._row_scenario.index(cls) if cls in self._row_scenario else -1
+        """Select the row for a scenario class, else the first selectable row.
+        (Headers are stored as None, so guard against cls being None.)"""
+        row = -1
+        if cls is not None and cls in self._row_scenario:
+            row = self._row_scenario.index(cls)
         if row < 0:
             row = next((i for i, c in enumerate(self._row_scenario) if c is not None), -1)
         if row >= 0:
@@ -202,13 +216,78 @@ class ScenarioPickerDialog(QDialog):
             return
         name, desc, ids, trajs = dlg.result_scenario
         save_custom_scenario(name, desc, ids, trajs)
-        cls = type(str(name), (), {'desc': desc, 'ids': ids, 'trajs': trajs})
-        if not self._custom_header_added:
-            self._add_header("CUSTOM")
-            self._custom_header_added = True
-        self.list.addItem(self._label(cls))
-        self._row_scenario.append(cls)
-        self.list.setCurrentRow(self.list.count() - 1)
+        self._refresh_and_select(name)
+
+    # --- right-click context menu --------------------------------------
+    def _on_context_menu(self, pos):
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        row = self.list.row(item)
+        cls = self._row_scenario[row] if 0 <= row < len(self._row_scenario) else None
+        if cls is None:                 # a group header, no actions
+            return
+        menu = QMenu(self)
+        if cls.__name__ in self._custom_names:
+            act_mod = menu.addAction("Modifier")
+            act_dup = menu.addAction("Dupliquer")
+            menu.addSeparator()
+            act_del = menu.addAction("Supprimer")
+        else:                           # predefined: only duplicate as custom
+            act_mod = act_del = None
+            act_dup = menu.addAction("Dupliquer en custom")
+        chosen = menu.exec(self.list.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+        if chosen is act_mod:
+            self._modify_custom(cls)
+        elif chosen is act_dup:
+            self._duplicate_scenario(cls)
+        elif chosen is act_del:
+            self._delete_custom(cls)
+
+    def _unique_custom_name(self, base):
+        """A name not already used by a custom or predefined scenario (so a
+        duplicate never silently overwrites an existing one)."""
+        existing = self._custom_names | {c.__name__ for c in self._predefined}
+        name, i = base, 2
+        while name in existing:
+            name, i = f"{base} {i}", i + 1
+        return name
+
+    def _refresh_and_select(self, name):
+        self._populate_list()
+        cls = next((c for c in self._row_scenario
+                    if c is not None and c.__name__ == name), None)
+        self._select_scenario(cls)
+
+    def _modify_custom(self, cls):
+        dlg = CustomScenarioDialog(self, initial=(cls.__name__, cls.ids, cls.trajs))
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        name, desc, ids, trajs = dlg.result_scenario
+        if name != cls.__name__:
+            delete_custom_scenario(cls.__name__)   # renamed: drop the old entry
+        save_custom_scenario(name, desc, ids, trajs)
+        self._refresh_and_select(name)
+
+    def _duplicate_scenario(self, cls):
+        suggested = self._unique_custom_name(f"{cls.__name__} copy")
+        dlg = CustomScenarioDialog(self, initial=(suggested, cls.ids, cls.trajs))
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        name, desc, ids, trajs = dlg.result_scenario
+        save_custom_scenario(name, desc, ids, trajs)
+        self._refresh_and_select(name)
+
+    def _delete_custom(self, cls):
+        if QMessageBox.question(
+                self, "Supprimer le scénario",
+                f"Supprimer le scénario custom « {cls.__name__} » ?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        delete_custom_scenario(cls.__name__)
+        self._refresh_and_select(None)
 
     def _on_selection_changed(self, row):
         while self.detail_layout.count():
