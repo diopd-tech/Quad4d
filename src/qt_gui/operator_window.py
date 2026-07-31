@@ -373,6 +373,34 @@ class OperatorWindow(QMainWindow):
         self.btn_view_menu.setMenu(self.view_menu)
         h.addWidget(self.btn_scen_menu)
         h.addWidget(self.btn_view_menu)
+
+        # live show-speed factor, next to the menus: scales the WHOLE show
+        # uniformly (all drones), so sync and deconfliction stay valid. Movable
+        # during the show -- the FD eases the factor and rescales the feedforward
+        # so the reference never jumps.
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setMinimum(50)     # x0.5
+        self.speed_slider.setMaximum(150)    # x1.5
+        self.speed_slider.setValue(100)      # x1.0
+        self.speed_slider.setSingleStep(5)
+        self.speed_slider.setPageStep(10)
+        self.speed_slider.setFixedWidth(110)
+        self.speed_slider.setCursor(Qt.PointingHandCursor)
+        self.speed_slider.setToolTip("Show speed (all drones)")
+        self.speed_slider.setStyleSheet(
+            "QSlider::groove:horizontal{height:4px;background:#2A312D;border-radius:2px;}"
+            "QSlider::sub-page:horizontal{background:#8B938F;border-radius:2px;}"
+            "QSlider::handle:horizontal{background:#8B938F;border:1px solid #353D38;"
+            "width:14px;margin:-6px 0;border-radius:7px;}"
+            "QSlider::handle:horizontal:hover{background:#C7D0CB;}")
+        self.speed_value = QLabel("×1.0")
+        self.speed_value.setMinimumWidth(34)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        h.addSpacing(8)
+        h.addWidget(QLabel("Speed"))
+        h.addWidget(self.speed_slider)
+        h.addWidget(self.speed_value)
+
         h.addStretch(1)
         return box
 
@@ -495,33 +523,6 @@ class OperatorWindow(QMainWindow):
             grid.addWidget(self.button_land_all,       2, 0, 1, 2)
         v.addLayout(grid)
         v.addWidget(self.progress)
-
-        # live show-speed factor: scales the WHOLE show uniformly (all drones
-        # together), so choreography sync and deconfliction are preserved. It
-        # can be moved during the show too -- the FD eases the factor and
-        # rescales the feedforward, so the reference never jumps.
-        speed_row = QHBoxLayout()
-        speed_row.setSpacing(8)
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setMinimum(50)     # x0.5
-        self.speed_slider.setMaximum(150)    # x1.5
-        self.speed_slider.setValue(100)      # x1.0
-        self.speed_slider.setSingleStep(5)
-        self.speed_slider.setPageStep(10)
-        self.speed_slider.setCursor(Qt.PointingHandCursor)
-        self.speed_slider.setStyleSheet(
-            "QSlider::groove:horizontal{height:4px;background:#2A312D;border-radius:2px;}"
-            "QSlider::sub-page:horizontal{background:#8B938F;border-radius:2px;}"
-            "QSlider::handle:horizontal{background:#8B938F;border:1px solid #353D38;"
-            "width:14px;margin:-6px 0;border-radius:7px;}"
-            "QSlider::handle:horizontal:hover{background:#C7D0CB;}")
-        self.speed_value = QLabel("×1.0")
-        self.speed_value.setMinimumWidth(34)
-        self.speed_slider.valueChanged.connect(self._on_speed_changed)
-        speed_row.addWidget(QLabel("Vitesse"))
-        speed_row.addWidget(self.speed_slider, 1)
-        speed_row.addWidget(self.speed_value)
-        v.addLayout(speed_row)
         return group
 
     def _on_speed_changed(self, value):
