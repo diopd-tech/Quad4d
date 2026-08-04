@@ -96,70 +96,60 @@ class Scenario17:  # lissajous solo
     ids   = [112]
     trajs = ['show lissajous']
 
-class Scenario18:  # star solo
-    desc  = 'star solo'
-    ids   = [112]
-    trajs = ['show star']
-
-class Scenario19:  # convergence a 3
+class Scenario18:  # convergence a 3
     desc  = 'three-way convergence'
     ids   = [112, 113, 114]
     trajs = ['conflit tri a', 'conflit tri b', 'conflit tri c']
 
-class Scenario20:   # spirale montante a 3 drones
+class Scenario19:   # spirale montante a 3 drones
     desc  = 'ascending spiral, 3 drones'
     ids   = [112, 113, 114]
     trajs = ['spirale a', 'spirale b', 'spirale c']
 
-class Scenario21:   # spirale a 2 drones
+class Scenario20:   # spirale a 2 drones
     desc  = 'spiral, 2 drones'
     ids   = [112, 113]
     trajs = ['spirale a', 'spirale c']
 
-class Scenario22:   # vraie spirale montante a 3 drones
+class Scenario21:   # vraie spirale montante a 3 drones
     desc  = 'true ascending spiral, 3 drones'
     ids   = [112, 113, 114]
     trajs = ['spirale montante a', 'spirale montante b', 'spirale montante c']
 
-class Scenario23:   # vraie spirale montante a 2 drones (memes helices, dephasees)
+class Scenario22:   # vraie spirale montante a 2 drones (memes helices, dephasees)
     desc  = 'true ascending spiral, 2 drones'
     ids   = [112, 113]
     trajs = ['spirale montante a', 'spirale montante c']
 
-class Scenario24:   # fleur qui s'ouvre/se ferme, 3 drones
+class Scenario23:   # fleur qui s'ouvre/se ferme, 3 drones
     desc  = 'blooming flower, 3 drones'
     ids   = [112, 113, 114]
     trajs = ['flower a', 'flower b', 'flower c']
 
-class Scenario25:   # vague synchronisee (ola), 3 drones
-    desc  = 'synchronised wave, 3 drones'
-    ids   = [112, 113, 114]
-    trajs = ['wave left', 'wave mid', 'wave right']
-
-class Scenario26:   # double helice / ADN, 2 drones
+class Scenario24:   # double helice / ADN, 2 drones
     desc  = 'double helix (DNA), 2 drones'
     ids   = [112, 113]
     trajs = ['dna strand a', 'dna strand b']
 
-class Scenario27:   # cascade en escalier, 3 drones
+class Scenario25:   # cascade en escalier, 3 drones
     desc  = 'cascade staircase, 3 drones'
     ids   = [112, 113, 114]
     trajs = ['cascade low', 'cascade mid', 'cascade high']
 
-class Scenario28:   # spirographe / rosace epicyclique, solo
+class Scenario26:   # spirographe / rosace epicyclique, solo
     desc  = 'spirograph rosette, solo'
     ids   = [112]
     trajs = ['show spirograph']
 
-class Scenario29:   # noeud torique 3D, solo
+class Scenario27:   # noeud torique 3D, solo
     desc  = '3D torus knot, solo'
     ids   = [112]
     trajs = ['show knot']
 
-class Scenario30:   # tour de rosaces etagees, 3 drones (safe: separees en hauteur)
-    desc  = 'spirograph tower, 3 drones'
-    ids   = [112, 113, 114]
-    trajs = ['show spirograph low', 'show spirograph mid', 'show spirograph high']
+class Scenario28:   # tour de rosaces etagees, 2 drones (safe: separees en hauteur)
+    desc  = 'spirograph tower, 2 drones'
+    ids   = [112, 113]
+    trajs = ['show spirograph low', 'show spirograph high']
 
 
 scenarios = [
@@ -191,8 +181,6 @@ scenarios = [
     Scenario26,
     Scenario27,
     Scenario28,
-    Scenario29,
-    Scenario30,
     ]
 
 
@@ -206,7 +194,7 @@ scenarios = [
 _WITH_CONFLICT = [
     Scenario4,    # two back-and-forth (head-on)
     Scenario8,    # two figure-of-eight, same height (cross at centre)
-    Scenario19,   # three-way convergence
+    Scenario18,   # three-way convergence
 ]
 
 for _c in scenarios:
