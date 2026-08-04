@@ -146,6 +146,21 @@ class Scenario27:   # cascade en escalier, 3 drones
     ids   = [112, 113, 114]
     trajs = ['cascade low', 'cascade mid', 'cascade high']
 
+class Scenario28:   # spirographe / rosace epicyclique, solo
+    desc  = 'spirograph rosette, solo'
+    ids   = [112]
+    trajs = ['show spirograph']
+
+class Scenario29:   # noeud torique 3D, solo
+    desc  = '3D torus knot, solo'
+    ids   = [112]
+    trajs = ['show knot']
+
+class Scenario30:   # tour de rosaces etagees, 3 drones (safe: separees en hauteur)
+    desc  = 'spirograph tower, 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['show spirograph low', 'show spirograph mid', 'show spirograph high']
+
 
 scenarios = [
     Scenario1,
@@ -175,6 +190,9 @@ scenarios = [
     Scenario25,
     Scenario26,
     Scenario27,
+    Scenario28,
+    Scenario29,
+    Scenario30,
     ]
 
 

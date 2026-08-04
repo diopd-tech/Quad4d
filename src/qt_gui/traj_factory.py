@@ -585,6 +585,78 @@ class ShowStar(Traj45):
         super().__init__(wps)
 
 
+# --- analytic showpieces built as sums of sinusoids ---------------------
+# Any curve written as a sum of sinusoids has ALL its time-derivatives in
+# closed form, so the flat output (pos..snap) is exact -> clean diff-flatness
+# and good tracking. _harm returns [f, f', f'', f''', f''''] for one axis.
+def _harm(dt, terms):
+    """Sum of sinusoidal components on one axis, with the 5 first time
+    derivatives. terms: iterable of (amp, om, phase, kind), kind in {'c','s'}
+    for amp*cos(om*dt+phase) / amp*sin(...). A term with om=0 is a constant."""
+    out = np.zeros(5)
+    for amp, om, ph, kind in terms:
+        th = om * dt + ph
+        if kind == 'c':          # d^n/dt^n [cos] cycles cos,-sin,-cos,sin,...
+            vals = (np.cos(th), -np.sin(th), -np.cos(th), np.sin(th), np.cos(th))
+        else:                    # sin
+            vals = (np.sin(th),  np.cos(th), -np.sin(th), -np.cos(th), np.sin(th))
+        p = 1.0
+        for n in range(5):
+            out[n] += amp * p * vals[n]
+            p *= om              # amp * om^n * vals[n]
+    return out
+
+
+# Spirograph / epicyclic rosette: sum of two rotating vectors. w2 = -k*w1 (k
+# integer) so it closes after one base turn; petal count set by k. Hypnotic,
+# analytic, solo (no inter-drone conflict).
+class ShowSpirograph(p_mt.Trajectory):
+    name, desc = 'show spirograph', 'epicyclic rosette (two superposed rotations), solo'
+    def __init__(self, R=1.6, a=0.9, k=4, om=0.28, z=2.5, phase=0.):
+        self.R, self.a, self.k, self.om, self.z, self.phase = R, a, k, om, z, phase
+        self.t0, self.duration = 0., 2*np.pi/om
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt = t - self.t0
+        w1, w2 = self.om, -self.k*self.om
+        Yc = np.zeros((5, 4))
+        Yc[:, p_mt._x] = _harm(dt, [(self.R, w1, self.phase, 'c'), (self.a, w2, self.phase, 'c')])
+        Yc[:, p_mt._y] = _harm(dt, [(self.R, w1, self.phase, 's'), (self.a, w2, self.phase, 's')])
+        Yc[:, p_mt._z] = _harm(dt, [(self.z, 0., 0., 'c')])
+        return Yc.T
+
+# three stacked rosettes (different petal counts), height-separated >= margin
+# so the trio is safe by construction (a rosette "tower").
+class ShowSpirographLow(ShowSpirograph):
+    name, desc = 'show spirograph low', 'rosette k=3, z=1.5'
+    def __init__(self): super().__init__(k=3, om=0.26, z=1.5)
+class ShowSpirographMid(ShowSpirograph):
+    name, desc = 'show spirograph mid', 'rosette k=4, z=3.0'
+    def __init__(self): super().__init__(k=4, om=0.26, z=3.0)
+class ShowSpirographHigh(ShowSpirograph):
+    name, desc = 'show spirograph high', 'rosette k=5, z=4.5'
+    def __init__(self): super().__init__(k=5, om=0.26, z=4.5)
+
+
+# (p,q) torus knot: product-to-sum turns cos(q.)cos(p.) etc. into sums of
+# sinusoids, so it's analytic like the rest. Looks genuinely 3D. Solo.
+class ShowKnot(p_mt.Trajectory):
+    name, desc = 'show knot', '(2,3) torus knot, solo 3D showpiece'
+    def __init__(self, Rmaj=1.5, r=0.7, p=2, q=3, om=0.30, zc=3.0):
+        self.Rmaj, self.r, self.p, self.q, self.om, self.zc = Rmaj, r, p, q, om, zc
+        self.t0, self.duration = 0., 2*np.pi/om
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt = t - self.t0
+        w, r2 = self.om, self.r/2.
+        wp, wpq, wmq, wq = self.p*w, (self.p+self.q)*w, (self.p-self.q)*w, self.q*w
+        Yc = np.zeros((5, 4))
+        Yc[:, p_mt._x] = _harm(dt, [(self.Rmaj, wp, 0., 'c'), (r2, wpq, 0., 'c'), (r2, wmq, 0., 'c')])
+        Yc[:, p_mt._y] = _harm(dt, [(self.Rmaj, wp, 0., 's'), (r2, wpq, 0., 's'), (r2, wmq, 0., 's')])
+        Yc[:, p_mt._z] = _harm(dt, [(self.zc, 0., 0., 'c'), (self.r, wq, 0., 's')])
+        return Yc.T
+
+
 
 class ConflitTriA(p_mt.SmoothBackAndForth):
     name, desc = 'conflit tri a', 'coin->centre->coin, 0 deg'
@@ -828,6 +900,12 @@ TrajFactory.register(ShowOvalHigh, 'show')
 TrajFactory.register(ShowLissajous, 'show')
 TrajFactory.register(ShowLissajousLow, 'show')
 TrajFactory.register(ShowStar, 'show')
+
+TrajFactory.register(ShowSpirograph, 'show')
+TrajFactory.register(ShowSpirographLow, 'show')
+TrajFactory.register(ShowSpirographMid, 'show')
+TrajFactory.register(ShowSpirographHigh, 'show')
+TrajFactory.register(ShowKnot, 'show')
 
 TrajFactory.register(SpiraleA, 'show')
 TrajFactory.register(SpiraleB, 'show')
