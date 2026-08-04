@@ -156,10 +156,10 @@ class Scenario29:   # fontaine / eclosion, 3 drones (safe: 120 deg d'azimut)
     ids   = [112, 113, 114]
     trajs = ['fountain a', 'fountain b', 'fountain c']
 
-class Scenario30:   # formation morphing ligne<->triangle, 3 drones
-    desc  = 'morphing formation (line/triangle), 3 drones'
-    ids   = [112, 113, 114]
-    trajs = ['morph a', 'morph b', 'morph c']
+class Scenario30:   # fontaine / eclosion, 2 drones (safe: azimuts opposes)
+    desc  = 'fountain bloom, 2 drones'
+    ids   = [112, 113]
+    trajs = ['fountain a', 'fountain opp']
 
 
 scenarios = [

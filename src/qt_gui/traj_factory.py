@@ -683,6 +683,9 @@ class FountainB(_Fountain):
 class FountainC(_Fountain):
     name, desc = 'fountain c', 'fountain arc, azimuth 240'
     def __init__(self): super().__init__(phi=4*np.pi/3)
+class FountainOpp(_Fountain):   # paired with 'fountain a' for a 2-drone version
+    name, desc = 'fountain opp', 'fountain arc, azimuth 180'
+    def __init__(self): super().__init__(phi=np.pi)
 
 
 # Morphing formation: each drone oscillates between a 'line' point L and a
@@ -970,6 +973,7 @@ TrajFactory.register(ShowKnot, 'show')
 TrajFactory.register(FountainA, 'show')
 TrajFactory.register(FountainB, 'show')
 TrajFactory.register(FountainC, 'show')
+TrajFactory.register(FountainOpp, 'show')
 TrajFactory.register(MorphA, 'show')
 TrajFactory.register(MorphB, 'show')
 TrajFactory.register(MorphC, 'show')
