@@ -657,6 +657,66 @@ class ShowKnot(p_mt.Trajectory):
         return Yc.T
 
 
+# Fountain: each drone flies the SAME vertical circle (radius R at horizontal
+# offset rho0, azimuth phi), so the trio at phi = 0/120/240 stays 120 deg apart
+# at every instant -> pairwise distance = sqrt(3)*s(t) >= sqrt(3)*(rho0-R),
+# safe by construction. Constant speed R*om. A blooming 3-arm fountain.
+class _Fountain(p_mt.Trajectory):
+    def __init__(self, phi=0., rho0=2.0, R=1.0, z0=2.5, om=0.9):
+        self.cphi, self.sphi = np.cos(phi), np.sin(phi)
+        self.rho0, self.R, self.z0, self.om = rho0, R, z0, om
+        self.t0, self.duration = 0., 2*np.pi/om
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt, w = t - self.t0, self.om
+        Yc = np.zeros((5, 4))
+        Yc[:, p_mt._x] = _harm(dt, [(self.rho0*self.cphi, 0., 0., 'c'), (self.R*self.cphi, w, 0., 'c')])
+        Yc[:, p_mt._y] = _harm(dt, [(self.rho0*self.sphi, 0., 0., 'c'), (self.R*self.sphi, w, 0., 'c')])
+        Yc[:, p_mt._z] = _harm(dt, [(self.z0, 0., 0., 'c'), (self.R, w, 0., 's')])
+        return Yc.T
+class FountainA(_Fountain):
+    name, desc = 'fountain a', 'fountain arc, azimuth 0'
+    def __init__(self): super().__init__(phi=0.)
+class FountainB(_Fountain):
+    name, desc = 'fountain b', 'fountain arc, azimuth 120'
+    def __init__(self): super().__init__(phi=2*np.pi/3)
+class FountainC(_Fountain):
+    name, desc = 'fountain c', 'fountain arc, azimuth 240'
+    def __init__(self): super().__init__(phi=4*np.pi/3)
+
+
+# Morphing formation: each drone oscillates between a 'line' point L and a
+# 'triangle' point T with beta(t) = (1-cos om t)/2, so pos = mid + amp*cos(om t)
+# (a pure sinusoid per axis). L and T are chosen so the min pairwise distance
+# over the whole morph stays ~1.9 m -> safe by construction.
+class _Morph(p_mt.Trajectory):
+    def __init__(self, L, T, z=2.0, om=0.6):
+        self.L, self.T, self.z, self.om = np.asarray(L, float), np.asarray(T, float), z, om
+        self.t0, self.duration = 0., 2*np.pi/om
+    def reset(self, t0): self.t0 = t0
+    def get(self, t):
+        dt, w = t - self.t0, self.om
+        mid = 0.5*(self.L + self.T)          # centre of the oscillation
+        amp = -0.5*(self.T - self.L)         # coefficient of cos(w t)
+        Yc = np.zeros((5, 4))
+        Yc[:, p_mt._x] = _harm(dt, [(mid[0], 0., 0., 'c'), (amp[0], w, 0., 'c')])
+        Yc[:, p_mt._y] = _harm(dt, [(mid[1], 0., 0., 'c'), (amp[1], w, 0., 'c')])
+        Yc[:, p_mt._z] = _harm(dt, [(self.z, 0., 0., 'c')])
+        return Yc.T
+_R_MORPH = 1.6
+class MorphA(_Morph):
+    name, desc = 'morph a', 'line<->triangle morph, drone A'
+    def __init__(self):
+        super().__init__(L=[-2., 0.], T=[_R_MORPH*np.cos(np.radians(210)), _R_MORPH*np.sin(np.radians(210))])
+class MorphB(_Morph):
+    name, desc = 'morph b', 'line<->triangle morph, drone B'
+    def __init__(self): super().__init__(L=[0., 0.], T=[0., _R_MORPH])
+class MorphC(_Morph):
+    name, desc = 'morph c', 'line<->triangle morph, drone C'
+    def __init__(self):
+        super().__init__(L=[2., 0.], T=[_R_MORPH*np.cos(np.radians(330)), _R_MORPH*np.sin(np.radians(330))])
+
+
 
 class ConflitTriA(p_mt.SmoothBackAndForth):
     name, desc = 'conflit tri a', 'coin->centre->coin, 0 deg'
@@ -906,6 +966,13 @@ TrajFactory.register(ShowSpirographLow, 'show')
 TrajFactory.register(ShowSpirographMid, 'show')
 TrajFactory.register(ShowSpirographHigh, 'show')
 TrajFactory.register(ShowKnot, 'show')
+
+TrajFactory.register(FountainA, 'show')
+TrajFactory.register(FountainB, 'show')
+TrajFactory.register(FountainC, 'show')
+TrajFactory.register(MorphA, 'show')
+TrajFactory.register(MorphB, 'show')
+TrajFactory.register(MorphC, 'show')
 
 TrajFactory.register(SpiraleA, 'show')
 TrajFactory.register(SpiraleB, 'show')

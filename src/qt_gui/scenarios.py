@@ -151,6 +151,16 @@ class Scenario28:   # tour de rosaces etagees, 2 drones (safe: separees en haute
     ids   = [112, 113]
     trajs = ['show spirograph low', 'show spirograph high']
 
+class Scenario29:   # fontaine / eclosion, 3 drones (safe: 120 deg d'azimut)
+    desc  = 'fountain bloom, 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['fountain a', 'fountain b', 'fountain c']
+
+class Scenario30:   # formation morphing ligne<->triangle, 3 drones
+    desc  = 'morphing formation (line/triangle), 3 drones'
+    ids   = [112, 113, 114]
+    trajs = ['morph a', 'morph b', 'morph c']
+
 
 scenarios = [
     Scenario1,
@@ -181,6 +191,8 @@ scenarios = [
     Scenario26,
     Scenario27,
     Scenario28,
+    Scenario29,
+    Scenario30,
     ]
 
 
