@@ -60,6 +60,10 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
 # Inter-drone deconfliction during the transit is not implemented yet (the
 # scheduling / height-layering approaches were removed pending a decision).
 TRANSIT_ARRIVE = 0.4    # m, target arrival threshold
+# Height-layered transit: each drone flies at its own altitude "layer" during
+# the horizontal move, so the trio can never collide (layers spaced > margin).
+TRANSIT_LAYER_BASE = 1.2   # m, lowest transit layer
+TRANSIT_LAYER_DZ   = 1.6   # m, vertical spacing between layers (> ~1.3 m margin)
 
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
@@ -389,39 +393,73 @@ class FlightDirector:
         elif self.status == FDStatus.FINISHED:
             pass
 
-    # --- transit: direct flight to targets (deconfliction TBD) ----------
-    # NOTE: no transit deconfliction for now. Every drone flies STRAIGHT to
-    # its target on Launch (join start points) and Stop (return to standby).
-    # The scheduling / gate-hold / height-layering approaches were removed
-    # after sim tests; the method is still under discussion.
+    # --- transit deconfliction: height-layering (phased, safe by construction) --
+    # Each drone gets its own transit altitude (a "layer"), assigned by current
+    # altitude order so no two drones cross in z while rising. The transit runs
+    # in three barrier phases: (1) all RISE to their layer (xy fixed), (2) all
+    # TRANSLATE horizontally above their target while separated in z, (3) all
+    # DESCEND to their target. Layers are TRANSIT_LAYER_DZ apart (> safety
+    # margin), so during the horizontal phase any two drones stay >= DZ apart in
+    # 3D -- collision-free whatever the start/target geometry.
     def start_transit(self, targets):
-        """Begin the transit to `targets` {ac_id:(x,y,z)}: every drone flies
-        straight to its target (no inter-drone deconfliction yet)."""
+        """Begin the height-layered transit to `targets` {ac_id:(x,y,z)}."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
-        self._transit = {'targets': targets}
+        start = {i: tuple(float(v) for v in self.acs[i].T[:3, 3]) for i in self.ids}
+        # layer order = by TARGET altitude, then by current altitude. Target-z
+        # order keeps the DESCENT collision-free even when targets are stacked
+        # (same xy, e.g. a spirograph tower's start points); the current-z
+        # tie-break keeps the RISE collision-free when targets share a height
+        # (e.g. all standby points at z=1.2). In a real Launch/Stop one end is
+        # always the spread-out standby, so this ordering is safe by construction.
+        order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
+        layers = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
+                  for k, i in enumerate(order)}
+        self._transit = {'targets': targets, 'start': start,
+                         'layers': layers, 'phase': 'rise'}
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
-        logger.info("transit: direct to " + ", ".join(
-            f"{i}:{tuple(round(v, 2) for v in g)}" for i, g in targets.items()))
+        logger.info("transit (height-layered): "
+                    + ", ".join(f"{i}@{layers[i]:.1f}m" for i in self.ids))
+
+    def _transit_waypoint(self, i):
+        """Point drone i is currently commanded to, for the active phase."""
+        t = self._transit
+        sx, sy, _ = t['start'][i]
+        tx, ty, tz = t['targets'][i]
+        lz = t['layers'][i]
+        phase = t['phase']
+        if phase == 'rise':      return (sx, sy, lz)   # climb to layer, xy fixed
+        if phase == 'translate': return (tx, ty, lz)   # move above target at layer
+        return (tx, ty, tz)                            # descend to target
 
     def _transit_send(self):
         for i in self.ids:
-            self.acs[i].goto_point(self._transit['targets'][i])
+            self.acs[i].goto_point(self._transit_waypoint(i))
+
+    _TRANSIT_PHASES = ('rise', 'translate', 'descend', 'done')
 
     def transit_step(self):
-        """Resend targets (robust to a dropped goto); True once every drone
-        has reached its target."""
+        """Drive the phased transit; True once every drone has reached its
+        target (end of the descend phase). A phase advances only when ALL drones
+        have reached the current phase's waypoint (barrier) -- that barrier is
+        what keeps them separated in height during the horizontal move."""
         t = getattr(self, '_transit', None)
         if t is None:
             return True
         self._transit_send()
-        done = all(np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
-                   - np.asarray(t['targets'][i], dtype=float)) < TRANSIT_ARRIVE
-                   for i in self.ids)
-        if done:
-            self._transit = None
-        return done
+        reached = all(
+            np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
+                           - np.asarray(self._transit_waypoint(i), dtype=float))
+            < TRANSIT_ARRIVE for i in self.ids)
+        if reached:
+            nxt = self._TRANSIT_PHASES[self._TRANSIT_PHASES.index(t['phase']) + 1]
+            if nxt == 'done':
+                self._transit = None
+                return True
+            t['phase'] = nxt
+            logger.debug(f"transit: phase -> {t['phase']}")
+        return False
 
     def on_pprz_connect(self, conf):
         logger.debug(f'{conf.id} ({conf.name}) connected')
