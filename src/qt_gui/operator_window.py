@@ -600,12 +600,19 @@ class OperatorWindow(QMainWindow):
         hook = getattr(self.app, 'resolve_conflicts_hook', None)
         if conflicts and hook is not None:
             ok, report = hook(safety_distance=1.0)
+            # the per-hold report is developer detail (one line per hold, per
+            # conversion, per period alignment): keep it in the terminal log and
+            # show the operator only a summary, plus anything that went wrong
             for line in report:
-                self.log_text('  ' + line)
+                logger.info('deconfliction: ' + line)
+                if any(w in line for w in ('could not', 'giving up', 'persist')):
+                    self.log_text('  ' + line)
             conflicts = self.model.detect_conflicts(safety_distance=1.0)
             if ok and not conflicts:
                 self._set_safety_state("Deconflicted (on-path scheduling)", "ok")
-                self.log_text("Conflicts resolved: geometry untouched, timing reshaped.")
+                n_holds = sum(1 for l in report if ' waits ' in l)
+                self.log_text(f"Conflicts resolved ({n_holds} hold(s)): "
+                              "geometry untouched, timing reshaped.")
             else:
                 self._set_safety_state(f"{len(conflicts)} conflict(s) REMAIN", "err")
                 self.log_text("Scheduling could not clear everything - do not launch.")

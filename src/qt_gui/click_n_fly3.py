@@ -56,9 +56,9 @@ GUIDED_AP_MODE = 19          # ap_mode index reported for GUIDED (13 is NAV);
                              # used to confirm the mode switch landed before
                              # sending a guided goto (else it is dropped)
 
-# Transit (join-start / return-standby): drones fly straight to their targets.
-# Inter-drone deconfliction during the transit is not implemented yet (the
-# scheduling / height-layering approaches were removed pending a decision).
+# Transit (join-start / return-standby): deconflicted, with the mode picked
+# automatically per geometry -- sequence, else lambda-scheduling, else height
+# layering (see start_transit).
 TRANSIT_ARRIVE = 0.4    # m, target arrival threshold
 # Height-layered transit: each drone flies at its own altitude "layer" during
 # the horizontal move, so the trio can never collide (layers spaced > margin).
@@ -486,14 +486,14 @@ class FlightDirector:
             self._transit['mode'] = 'sequence'
             self._transit['order'] = list(self.ids)   # priority = drone order
             self._transit['active'] = 0
-            logger.info("transit (sequence): " + " -> ".join(str(i) for i in self.ids))
+            logger.debug("transit (sequence): " + " -> ".join(str(i) for i in self.ids))
         else:
             delays, cleared = self._schedule_delays(start, targets)
             if cleared:
                 self._transit['mode'] = 'lambda'
                 self._transit['delays'] = delays
                 self._transit['start_t'] = time.time()
-                logger.info("transit (lambda): " + ", ".join(
+                logger.debug("transit (lambda): " + ", ".join(
                     f"{i}:{delays[i]:.1f}s" for i in self.ids))
             else:
                 order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
@@ -501,7 +501,7 @@ class FlightDirector:
                 self._transit['layers'] = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
                                            for k, i in enumerate(order)}
                 self._transit['phase'] = 'rise'
-                logger.info("transit (height-layered): " + ", ".join(
+                logger.debug("transit (height-layered): " + ", ".join(
                     f"{i}@{self._transit['layers'][i]:.1f}m" for i in self.ids))
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
@@ -602,7 +602,7 @@ class FlightDirector:
         if ac.t_last_status is None:
             # first status of the run, raw: the reference to compare with
             # the GCS when the panel and the strip disagree
-            logger.info(f'first ROTORCRAFT_STATUS from {sender}: {msg}')
+            logger.debug(f'first ROTORCRAFT_STATUS from {sender}: {msg}')
         ac.t_last_status = time.time()
         ac.battery_v = float(msg['vsupply'])
         try:
