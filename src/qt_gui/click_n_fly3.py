@@ -10,7 +10,7 @@ import sys, time, signal, logging, yaml, argparse
 import numpy as np
 from enum import Enum
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QDialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QDialog, QMessageBox
 from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
 from PySide6.QtGui import QGuiApplication
 QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
@@ -769,21 +769,41 @@ class Application(QApplication):
     def on_guide_clicked(self):
         #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
         #self.threadpool.start(self.worker)
-        # battery gate (operator safety): refuse to start on a pack already
-        # in the land-soon/land-now band. The show loops indefinitely, so
-        # there is no fixed end to project a discharge to -- the in-flight
-        # critical auto-land (periodic) covers the pack draining mid-show.
-        low = [(str(_id), self.fd.acs[_id].battery_v)
-               for _id in self.fd.ids
-               if battery_state(getattr(self.fd.acs[_id], 'battery_v', None),
-                                getattr(self.fd.acs[_id], 'batt_limits', None))
-               in ('warn', 'bad')]
-        if low:
-            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in low)
+        # battery gate (operator safety), in two steps:
+        #  - CRITICAL pack (land-now band): hard refusal, no override. The drone
+        #    may drop out of the sky; swapping is the only answer.
+        #  - LOW pack (land-soon band): ask instead of refusing. A short demo on
+        #    a half-used pack is a legitimate call, and forcing a swap for a
+        #    one-lap flight is needlessly costly -- but the operator states it.
+        # The in-flight critical auto-land (periodic) still covers a pack
+        # draining mid-show, whatever was decided here.
+        def _packs(state):
+            return [(str(_id), self.fd.acs[_id].battery_v) for _id in self.fd.ids
+                    if battery_state(getattr(self.fd.acs[_id], 'battery_v', None),
+                                     getattr(self.fd.acs[_id], 'batt_limits', None)) == state]
+        crit, low = _packs('bad'), _packs('warn')
+        if crit:
+            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in crit)
             self.operator_view.log_text(
-                f'START BLOCKED: battery too low on drone(s) {detail} '
+                f'START BLOCKED: battery CRITICAL on drone(s) {detail} '
                 f'- swap the pack(s) before launching')
             return
+        if low:
+            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in low)
+            answer = QMessageBox.question(
+                self.operator_view, 'Batterie basse',
+                f'Batterie basse sur le(s) drone(s) {detail}.\n\n'
+                'Le vol reste possible, mais gardez-le court : le pack peut '
+                'atteindre le seuil critique en vol (atterrissage automatique).\n\n'
+                'Lancer le show quand même ?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)      # default = do not launch
+            if answer != QMessageBox.StandardButton.Yes:
+                self.operator_view.log_text(
+                    f'Launch cancelled (low battery on drone(s) {detail})')
+                return
+            self.operator_view.log_text(
+                f'Launching on LOW battery ({detail}) - operator confirmed, keep it short')
         self._standby_state = None  # launching now supersedes standby staging
         self._prepare_state = None
         self.operator_view.log_text('Take off and trajectory following started')
