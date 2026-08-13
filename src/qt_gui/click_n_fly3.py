@@ -64,6 +64,18 @@ TRANSIT_ARRIVE = 0.4    # m, target arrival threshold
 # the horizontal move, so the trio can never collide (layers spaced > margin).
 TRANSIT_LAYER_BASE = 1.2   # m, lowest transit layer
 TRANSIT_LAYER_DZ   = 1.6   # m, vertical spacing between layers (> ~1.3 m margin)
+TRANSIT_SEQ_MARGIN = 1.3   # m, min clearance to auto-pick the prettier 'sequence'
+
+
+def _point_seg_dist(p, a, b):
+    """Shortest distance from point p to the segment [a, b] (3D)."""
+    p, a, b = (np.asarray(v, dtype=float) for v in (p, a, b))
+    ab = b - a
+    L2 = float(ab @ ab)
+    if L2 < 1e-9:
+        return float(np.linalg.norm(p - a))
+    u = float(np.clip((p - a) @ ab / L2, 0.0, 1.0))
+    return float(np.linalg.norm(p - (a + u * ab)))
 
 # Speed cap: a trajectory whose peak speed exceeds TARGET_MAX_SPEED is slowed
 # (SlowedTraj) just enough to bring its peak down to it, so fast trajectories
@@ -393,38 +405,68 @@ class FlightDirector:
         elif self.status == FDStatus.FINISHED:
             pass
 
-    # --- transit deconfliction: height-layering (phased, safe by construction) --
-    # Each drone gets its own transit altitude (a "layer"), assigned by current
-    # altitude order so no two drones cross in z while rising. The transit runs
-    # in three barrier phases: (1) all RISE to their layer (xy fixed), (2) all
-    # TRANSLATE horizontally above their target while separated in z, (3) all
-    # DESCEND to their target. Layers are TRANSIT_LAYER_DZ apart (> safety
-    # margin), so during the horizontal phase any two drones stay >= DZ apart in
-    # 3D -- collision-free whatever the start/target geometry.
+    # --- transit deconfliction: automatic mode choice -------------------------
+    # The mode is picked automatically (no operator action): the prettier
+    # 'sequence' is used when it is geometrically safe, otherwise the always-safe
+    # 'layered' fallback.
+    # 'sequence' : drones move ONE BY ONE (a drone leaves only once the previous
+    #              has arrived), so a single drone is ever in motion. Chosen only
+    #              when no moving drone's straight path passes within
+    #              TRANSIT_SEQ_MARGIN of a parked one (_seq_is_safe).
+    # 'layered'  : phased height-layering, SAFE BY CONSTRUCTION for any geometry.
+    #              (1) all RISE to their own altitude layer (xy fixed), (2) all
+    #              TRANSLATE above their target separated in z, (3) all DESCEND to
+    #              target. Barriers between phases; layers TRANSIT_LAYER_DZ apart
+    #              (> margin), ordered by (target z, current z) so the descent is
+    #              safe even towards stacked targets and the rise safe towards a
+    #              shared height (standby).
+    def _seq_is_safe(self, start, targets, margin=TRANSIT_SEQ_MARGIN):
+        """True if the one-by-one 'sequence' transit is collision-free: for each
+        drone's straight move, no other (parked) drone is within `margin` of its
+        path. Drones that already moved are parked at their target, the others at
+        their start."""
+        order = list(self.ids)
+        for k, i in enumerate(order):
+            a, b = start[i], targets[i]
+            for kk, j in enumerate(order):
+                if j == i:
+                    continue
+                parked = targets[j] if kk < k else start[j]
+                if _point_seg_dist(parked, a, b) < margin:
+                    return False
+        return True
+
     def start_transit(self, targets):
-        """Begin the height-layered transit to `targets` {ac_id:(x,y,z)}."""
+        """Begin the transit to `targets` {ac_id:(x,y,z)}, auto-picking the
+        transit mode: 'sequence' when it is safe, else 'layered'."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
         start = {i: tuple(float(v) for v in self.acs[i].T[:3, 3]) for i in self.ids}
-        # layer order = by TARGET altitude, then by current altitude. Target-z
-        # order keeps the DESCENT collision-free even when targets are stacked
-        # (same xy, e.g. a spirograph tower's start points); the current-z
-        # tie-break keeps the RISE collision-free when targets share a height
-        # (e.g. all standby points at z=1.2). In a real Launch/Stop one end is
-        # always the spread-out standby, so this ordering is safe by construction.
-        order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
-        layers = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
-                  for k, i in enumerate(order)}
-        self._transit = {'targets': targets, 'start': start,
-                         'layers': layers, 'phase': 'rise'}
+        mode = 'sequence' if self._seq_is_safe(start, targets) else 'layered'
+        self._transit = {'targets': targets, 'start': start, 'mode': mode}
+        if mode == 'sequence':
+            self._transit['order'] = list(self.ids)   # priority = drone order
+            self._transit['active'] = 0
+            logger.info("transit (sequence): " + " -> ".join(str(i) for i in self.ids))
+        else:  # 'layered'
+            order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
+            self._transit['layers'] = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
+                                       for k, i in enumerate(order)}
+            self._transit['phase'] = 'rise'
+            logger.info("transit (height-layered): " + ", ".join(
+                f"{i}@{self._transit['layers'][i]:.1f}m" for i in self.ids))
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
-        logger.info("transit (height-layered): "
-                    + ", ".join(f"{i}@{layers[i]:.1f}m" for i in self.ids))
 
     def _transit_waypoint(self, i):
-        """Point drone i is currently commanded to, for the active phase."""
+        """Point drone i is currently commanded to, given the mode/phase."""
         t = self._transit
+        if t['mode'] == 'sequence':
+            # moved & currently-moving drones head to their target; the ones not
+            # yet up stay parked at their start
+            idx = t['order'].index(i)
+            return t['targets'][i] if idx <= t['active'] else t['start'][i]
+        # 'layered'
         sx, sy, _ = t['start'][i]
         tx, ty, tz = t['targets'][i]
         lz = t['layers'][i]
@@ -437,22 +479,29 @@ class FlightDirector:
         for i in self.ids:
             self.acs[i].goto_point(self._transit_waypoint(i))
 
+    def _transit_reached(self, i):
+        return (np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
+                - np.asarray(self._transit_waypoint(i), dtype=float)) < TRANSIT_ARRIVE)
+
     _TRANSIT_PHASES = ('rise', 'translate', 'descend', 'done')
 
     def transit_step(self):
-        """Drive the phased transit; True once every drone has reached its
-        target (end of the descend phase). A phase advances only when ALL drones
-        have reached the current phase's waypoint (barrier) -- that barrier is
-        what keeps them separated in height during the horizontal move."""
+        """Drive the active transit; True once every drone reached its target."""
         t = getattr(self, '_transit', None)
         if t is None:
             return True
         self._transit_send()
-        reached = all(
-            np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
-                           - np.asarray(self._transit_waypoint(i), dtype=float))
-            < TRANSIT_ARRIVE for i in self.ids)
-        if reached:
+        if t['mode'] == 'sequence':
+            # let the next drone depart once the active one has arrived
+            if self._transit_reached(t['order'][t['active']]):
+                t['active'] += 1
+                if t['active'] >= len(t['order']):
+                    self._transit = None
+                    return True
+                logger.debug(f"transit: drone {t['order'][t['active']]} departs")
+            return False
+        # 'layered': advance phase only when ALL drones reached the waypoint
+        if all(self._transit_reached(i) for i in self.ids):
             nxt = self._TRANSIT_PHASES[self._TRANSIT_PHASES.index(t['phase']) + 1]
             if nxt == 'done':
                 self._transit = None
