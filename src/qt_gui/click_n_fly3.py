@@ -28,6 +28,7 @@ from guided_mode import GuidedMode
 from operator_window import OperatorWindow
 from scenario_picker import ScenarioPickerDialog
 from drones_panel import battery_state
+import battery_limits
 import flight_blocks as fb
 import spatial_deconfliction as sd
 
@@ -175,6 +176,7 @@ class Drone:
         # maybe? https://github.com/eric-wieser/numpy_ringbuffer/blob/master/numpy_ringbuffer/__init__.py
         self.status = DroneStatus.UNKNOWN
         self.battery_v = None
+        self.batt_limits = None   # set on connect, from the airframe
         self.link_down = False   # True once an Ivy send has failed (bus gone)
         self.standby_point = None   # fixed ENU staging point (None -> traj start)
         # pre-flight checklist inputs (see drones_panel)
@@ -195,6 +197,8 @@ class Drone:
         self.guided = GuidedMode(ivy)
         self.ivy = ivy
         self.blocks = fb.FlightPlanBlocks(conf)
+        # this drone's own battery thresholds, from its airframe (BAT section)
+        self.batt_limits = battery_limits.from_airframe(conf)
         self.status = DroneStatus.CONNECTED
 
     def _send(self, action):
@@ -771,7 +775,8 @@ class Application(QApplication):
         # critical auto-land (periodic) covers the pack draining mid-show.
         low = [(str(_id), self.fd.acs[_id].battery_v)
                for _id in self.fd.ids
-               if battery_state(getattr(self.fd.acs[_id], 'battery_v', None))
+               if battery_state(getattr(self.fd.acs[_id], 'battery_v', None),
+                                getattr(self.fd.acs[_id], 'batt_limits', None))
                in ('warn', 'bad')]
         if low:
             detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in low)
@@ -956,7 +961,8 @@ class Application(QApplication):
         # clear (packs swapped / drones on the ground).
         crit = [str(_id) for _id in self.fd.ids
                 if self._drone_airborne(self.fd.acs[_id])
-                and battery_state(getattr(self.fd.acs[_id], 'battery_v', None)) == 'bad']
+                and battery_state(getattr(self.fd.acs[_id], 'battery_v', None),
+                                   getattr(self.fd.acs[_id], 'batt_limits', None)) == 'bad']
         if crit and not getattr(self, '_batt_landing', False):
             self._batt_landing = True
             self.operator_view.log_text(

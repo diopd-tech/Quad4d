@@ -8,6 +8,8 @@ import os
 import time
 import numpy as np
 
+import battery_limits
+
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtSvg import QSvgRenderer
@@ -52,25 +54,25 @@ _DEFAULT_COLORS = ["#FFD400", "#00E676", "#D500F9"]   # yellow / green / violet
 _VALUE = "#C7D0CB"
 _MUTED = "#8B938F"
 
-# Battery pack: Gens Ace Soaring 2700mAh 3S (11.1V nominal, 12.6V full)
-_BATT_CELLS  = 3
-_BATT_LOW_V  = 3.5 * _BATT_CELLS   # 10.5V: plan to land
-_BATT_CRIT_V = 3.3 * _BATT_CELLS   # 9.9V: land now
+# Battery thresholds come from each drone's Paparazzi airframe (<section
+# name="BAT">, see battery_limits.py) so they are not hardcoded here; these
+# defaults only apply when the airframe can't be read.
+_DEFAULT_LIMITS = battery_limits.BatteryLimits()
 _BATT_LOW_COLOR  = "#F2A33C"
 _BATT_CRIT_COLOR = "#F85149"       # same red as the HMI error state
 
 
-def battery_state(v):
+def _limits_of(ac):
+    """Battery limits of a drone, falling back to the defaults."""
+    return getattr(ac, "batt_limits", None) or _DEFAULT_LIMITS
+
+
+def battery_state(v, limits=None):
     """Classify a pack voltage into the health states used by both the
     panel icon and the flight logic (start gate / auto-stop). Single
-    source of truth for the battery thresholds."""
-    if v is None:
-        return "unknown"
-    if v < _BATT_CRIT_V:
-        return "bad"
-    if v < _BATT_LOW_V:
-        return "warn"
-    return "ok"
+    source of truth for the battery thresholds; `limits` are the drone's
+    own (from its airframe), else the defaults."""
+    return (limits or _DEFAULT_LIMITS).state(v)
 
 # --- Pre-flight checklist -----------------------------------------------
 # The GCS "green icons", brought into the operator's window (ConOps §4):
@@ -239,17 +241,17 @@ class _DroneRow(QFrame):
         self.lbl_nav.setToolTip(tip)
 
 
-    def set_values(self, alt, spd, batt=None):
+    def set_values(self, alt, spd, batt=None, limits=None):
         def cell(label, value, unit, fmt, color=_VALUE, bold=False):
             v = (fmt % value + unit) if value is not None else "\u2014"
             weight = "font-weight:700;" if bold else ""
             return f'{label} <span style="color:{color};{weight}">{v}</span>'
         batt_color, batt_bold = _VALUE, False
-        if batt is not None:
-            if batt < _BATT_CRIT_V:
-                batt_color, batt_bold = _BATT_CRIT_COLOR, True
-            elif batt < _BATT_LOW_V:
-                batt_color = _BATT_LOW_COLOR
+        bstate = battery_state(batt, limits)
+        if bstate == "bad":
+            batt_color, batt_bold = _BATT_CRIT_COLOR, True
+        elif bstate == "warn":
+            batt_color = _BATT_LOW_COLOR
         self.lbl_metrics.setText(
             cell("alt", alt, "m", "%.2f") + "   "
             + cell("spd", spd, "m/s", "%.1f") + "   "
@@ -341,15 +343,17 @@ class DronesPanel(QGroupBox):
         else:
             items.append(("link", "bad", f"telemetry lost {now - t_status:.0f}s ago"))
 
-        # battery: pack voltage against the land-soon / land-now thresholds
+        # battery: pack voltage against this drone's land-soon / land-now
+        # thresholds (from its airframe, see battery_limits.py)
         v = getattr(ac, "battery_v", None)
-        bstate = battery_state(v)
+        lim = _limits_of(ac)
+        bstate = battery_state(v, lim)
         if bstate == "unknown":
             items.append(("battery", "unknown", "no ROTORCRAFT_STATUS seen yet"))
         else:
             detail = {"ok": f"{v:.1f}V ok",
-                      "warn": f"{v:.1f}V low (< {_BATT_LOW_V:.1f}V): plan to land",
-                      "bad": f"{v:.1f}V CRITICAL (< {_BATT_CRIT_V:.1f}V): land now"}[bstate]
+                      "warn": f"{v:.1f}V low (< {lim.low:.1f}V): plan to land",
+                      "bad": f"{v:.1f}V CRITICAL (< {lim.crit:.1f}V): land now"}[bstate]
             items.append(("battery", bstate, detail))
 
         return items
@@ -416,11 +420,12 @@ class DronesPanel(QGroupBox):
                 continue
 
             batt = getattr(ac, "battery_v", None)
+            lim = _limits_of(ac)
             row.set_checklist(self._checklist_items(ac, now))
             row.set_nav(*self._nav_html(ac, now))
 
             if not ac.vehicle_traj:                 # aucune pose recue encore
-                row.set_values(None, None, batt)
+                row.set_values(None, None, batt, lim)
                 self._prev.pop(_id, None)
                 continue
 
@@ -438,4 +443,4 @@ class DronesPanel(QGroupBox):
                     self._speed[_id] = v_est
             self._prev[_id] = (pos, now)
 
-            row.set_values(alt, v_est, batt)
+            row.set_values(alt, v_est, batt, lim)
