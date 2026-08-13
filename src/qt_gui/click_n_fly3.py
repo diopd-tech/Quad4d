@@ -406,13 +406,18 @@ class FlightDirector:
             pass
 
     # --- transit deconfliction: automatic mode choice -------------------------
-    # The mode is picked automatically (no operator action): the prettier
-    # 'sequence' is used when it is geometrically safe, otherwise the always-safe
-    # 'layered' fallback.
+    # The mode is picked automatically (no operator action): the simplest mode
+    # that is safe for the current geometry, in order 'sequence' -> 'lambda' ->
+    # 'layered'.
     # 'sequence' : drones move ONE BY ONE (a drone leaves only once the previous
-    #              has arrived), so a single drone is ever in motion. Chosen only
-    #              when no moving drone's straight path passes within
-    #              TRANSIT_SEQ_MARGIN of a parked one (_seq_is_safe).
+    #              has arrived), so a single drone is ever in motion. Chosen when
+    #              no moving drone's straight path passes within TRANSIT_SEQ_MARGIN
+    #              of a parked one (_seq_is_safe).
+    # 'lambda'   : lambda-scheduling by staggered departures -- every drone flies
+    #              STRAIGHT to its target, but lower-priority ones wait at their
+    #              start so no two cross within the margin (_schedule_delays).
+    #              Chosen when that schedule fully clears; handles crossing paths
+    #              that 'sequence' rejects, without the altitude detour.
     # 'layered'  : phased height-layering, SAFE BY CONSTRUCTION for any geometry.
     #              (1) all RISE to their own altitude layer (xy fixed), (2) all
     #              TRANSLATE above their target separated in z, (3) all DESCEND to
@@ -436,24 +441,68 @@ class FlightDirector:
                     return False
         return True
 
+    def _schedule_delays(self, start, targets, margin=TRANSIT_SEQ_MARGIN * 1.15,
+                         speed=1.0, dt=0.05, max_delay=12.0):
+        """Lambda-scheduling by staggered departure (priority = drone order):
+        each drone waits at its start until it can fly STRAIGHT to its target
+        without coming within `margin` of a higher-priority drone's (already
+        scheduled) transit. Returns ({ac_id: delay_s}, all_cleared).
+
+        The check uses a 15% buffer over the safety margin, and a fine time step:
+        planning exactly at the margin leaves no room for the real tracking error,
+        and a coarse step can step over a brief close approach."""
+        P = {i: np.asarray(start[i], dtype=float) for i in self.ids}
+        Tg = {i: np.asarray(targets[i], dtype=float) for i in self.ids}
+        dur = {i: max(float(np.linalg.norm(Tg[i] - P[i])) / speed, 1e-3) for i in self.ids}
+
+        def pos(i, t, d):                       # drone i at time t, departing at delay d
+            if t <= d:
+                return P[i]
+            return P[i] + (Tg[i] - P[i]) * min((t - d) / dur[i], 1.0)
+
+        ids = list(self.ids)
+        delays, cleared = {}, True
+        for k, i in enumerate(ids):
+            chosen = None
+            for d in np.arange(0.0, max_delay + dt, dt):
+                horizon = max([d + dur[i]] + [delays[j] + dur[j] for j in ids[:k]])
+                clash = any(np.linalg.norm(pos(i, t, d) - pos(j, t, delays[j])) < margin
+                            for t in np.arange(0.0, horizon + dt, dt) for j in ids[:k])
+                if not clash:
+                    chosen = float(d)
+                    break
+            if chosen is None:                  # could not clear within max_delay
+                chosen, cleared = float(max_delay), False
+            delays[i] = chosen
+        return delays, cleared
+
     def start_transit(self, targets):
         """Begin the transit to `targets` {ac_id:(x,y,z)}, auto-picking the
-        transit mode: 'sequence' when it is safe, else 'layered'."""
+        simplest safe mode: 'sequence', else 'lambda', else 'layered'."""
         targets = {i: tuple(float(v) for v in targets[i]) for i in self.ids}
         start = {i: tuple(float(v) for v in self.acs[i].T[:3, 3]) for i in self.ids}
-        mode = 'sequence' if self._seq_is_safe(start, targets) else 'layered'
-        self._transit = {'targets': targets, 'start': start, 'mode': mode}
-        if mode == 'sequence':
+        self._transit = {'targets': targets, 'start': start}
+        if self._seq_is_safe(start, targets):
+            self._transit['mode'] = 'sequence'
             self._transit['order'] = list(self.ids)   # priority = drone order
             self._transit['active'] = 0
             logger.info("transit (sequence): " + " -> ".join(str(i) for i in self.ids))
-        else:  # 'layered'
-            order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
-            self._transit['layers'] = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
-                                       for k, i in enumerate(order)}
-            self._transit['phase'] = 'rise'
-            logger.info("transit (height-layered): " + ", ".join(
-                f"{i}@{self._transit['layers'][i]:.1f}m" for i in self.ids))
+        else:
+            delays, cleared = self._schedule_delays(start, targets)
+            if cleared:
+                self._transit['mode'] = 'lambda'
+                self._transit['delays'] = delays
+                self._transit['start_t'] = time.time()
+                logger.info("transit (lambda): " + ", ".join(
+                    f"{i}:{delays[i]:.1f}s" for i in self.ids))
+            else:
+                order = sorted(self.ids, key=lambda i: (round(targets[i][2], 3), start[i][2]))
+                self._transit['mode'] = 'layered'
+                self._transit['layers'] = {i: TRANSIT_LAYER_BASE + k * TRANSIT_LAYER_DZ
+                                           for k, i in enumerate(order)}
+                self._transit['phase'] = 'rise'
+                logger.info("transit (height-layered): " + ", ".join(
+                    f"{i}@{self._transit['layers'][i]:.1f}m" for i in self.ids))
         for i in self.ids:
             self.acs[i].take_control()   # ensure Guided once
         self._transit_send()
@@ -466,6 +515,11 @@ class FlightDirector:
             # yet up stay parked at their start
             idx = t['order'].index(i)
             return t['targets'][i] if idx <= t['active'] else t['start'][i]
+        if t['mode'] == 'lambda':
+            # hold at start until my scheduled departure, then straight to target
+            if (time.time() - t['start_t']) < t['delays'][i]:
+                return t['start'][i]
+            return t['targets'][i]
         # 'layered'
         sx, sy, _ = t['start'][i]
         tx, ty, tz = t['targets'][i]
@@ -499,6 +553,15 @@ class FlightDirector:
                     self._transit = None
                     return True
                 logger.debug(f"transit: drone {t['order'][t['active']]} departs")
+            return False
+        if t['mode'] == 'lambda':
+            # done once every drone sits on its target (delays handled in the
+            # waypoint), i.e. the last staggered departure has arrived
+            if all(np.linalg.norm(np.asarray(self.acs[i].T[:3, 3], dtype=float)
+                   - np.asarray(t['targets'][i], dtype=float)) < TRANSIT_ARRIVE
+                   for i in self.ids):
+                self._transit = None
+                return True
             return False
         # 'layered': advance phase only when ALL drones reached the waypoint
         if all(self._transit_reached(i) for i in self.ids):
