@@ -1013,14 +1013,18 @@ def parse_cli():
     parser = argparse.ArgumentParser(description='ClicknFly, flight director.')
     parser.add_argument('--scen', help='the name of the scenario', default=0)
     parser.add_argument('--qt-name', help="Set the window name.", default='blaaaa', metavar="inkcut")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='debug logging (transit plans, staging details...)')
     args = parser.parse_args()
     return args
 
-            
+
 def main():
-    logging.basicConfig(level=logging.INFO)
-    logger.setLevel(logging.DEBUG)
     args = parse_cli()
+    # INFO by default: the terminal then shows warnings and the few key events.
+    # Run with -v for the developer detail (transit mode chosen, staging, ...).
+    logging.basicConfig(level=logging.INFO)
+    logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
     cnf = Application(args)
     def _quit(sig, frame):
         #print(chr(8)+chr(8),end="") # remove ^C from console... nope...
