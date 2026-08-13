@@ -388,20 +388,20 @@ class FlightDirector:
                 # deconflicted transit (staggered departures) to the starts
                 self.start_transit({i: tuple(float(v) for v in self.acs[i].Yref[:3, 0])
                                     for i in self.ids})
-                logger.debug('all connected -> deconflicted transit to start')
+                logger.info('all connected -> deconflicted transit to start')
         elif self.status == FDStatus.GETTING_READY:
             if self.transit_step():
                 self.duree_du_show = self.trajectories.trajectory_duration()
                 self.status, self.t0 = FDStatus.GUIDING, time.time()
                 self.show_t, self.speed_s = 0., self.speed_target  # start fresh
-                logger.debug('all drones arrived to start, starting the show')
+                logger.info('all drones arrived to start, starting the show')
         elif self.status == FDStatus.GUIDING:
             for i in self.ids:
                 self.acs[i].follow_ref()
         elif self.status == FDStatus.RETURNING:
             if self.transit_step():
                 self.status = FDStatus.FINISHED
-                logger.debug('all drones back at standby')
+                logger.info('all drones back at standby')
         elif self.status == FDStatus.FINISHED:
             pass
 
