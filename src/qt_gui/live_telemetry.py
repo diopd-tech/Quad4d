@@ -38,12 +38,18 @@ class TelemetryRecorder:
     def reset(self, ids):
         maxlen = int(_HISTORY_S * _RECORD_HZ)
         self.ids = list(ids)
-        self.data = {_id: {k: deque(maxlen=maxlen) for k in ('t', 'alt', 'spd', 'dist')}
+        # per drone: the measured series and, for the ones we can compare, the
+        # matching reference ("ghost" drone) series
+        self.data = {_id: {k: deque(maxlen=maxlen) for k in
+                           ('t', 'alt', 'spd', 'yawrate', 'dist',
+                            'alt_ref', 'spd_ref', 'yawrate_ref')}
                      for _id in self.ids}
         # global series: min pairwise inter-drone distance (the avoidance metric)
         self.gdata = {k: deque(maxlen=maxlen) for k in ('t', 'mindist')}
         self._prev = {}
         self._speed = {}
+        self._yaw = {}      # (yaw, t) of the previous sample, for the yaw rate
+        self._yawrate = {}
 
     def record(self, fd):
         now = time.time()
@@ -68,11 +74,36 @@ class TelemetryRecorder:
                     v_est = _SPEED_ALPHA * inst + (1 - _SPEED_ALPHA) * v_est
                     self._speed[_id] = v_est
             self._prev[_id] = (pos, now)
+
+            # measured yaw rate: derivative of the heading read from the pose,
+            # unwrapped so the +-pi crossing doesn't produce a huge spike
+            yaw = np.arctan2(ac.T[1, 0], ac.T[0, 0])
+            r_est = self._yawrate.get(_id, 0.)
+            prev_yaw = self._yaw.get(_id)
+            if prev_yaw is not None:
+                dt = now - prev_yaw[1]
+                if dt > 1e-3:
+                    dyaw = (yaw - prev_yaw[0] + np.pi) % (2 * np.pi) - np.pi
+                    r_est = _SPEED_ALPHA * (dyaw / dt) + (1 - _SPEED_ALPHA) * r_est
+                    self._yawrate[_id] = r_est
+            self._yaw[_id] = (yaw, now)
+
             d = self.data[_id]
             d['t'].append(t)
             d['alt'].append(pos[2])
             d['spd'].append(v_est)
+            d['yawrate'].append(r_est)
             d['dist'].append(ac.dist_to_ref() if tracking else float('nan'))
+            # the reference ("ghost" drone): flat output Yref, rows x/y/z/psi,
+            # columns = derivative order. Only meaningful while tracking.
+            if tracking:
+                Yref = np.asarray(ac.Yref, dtype=float)
+                d['alt_ref'].append(Yref[2, 0])
+                d['spd_ref'].append(float(np.linalg.norm(Yref[:3, 1])))
+                d['yawrate_ref'].append(Yref[3, 1])
+            else:
+                for k in ('alt_ref', 'spd_ref', 'yawrate_ref'):
+                    d[k].append(float('nan'))
 
         # min pairwise separation (needs at least two measured drones)
         if len(pos_now) >= 2:
@@ -94,7 +125,7 @@ class LiveTelemetryWindow(QWidget):
         super().__init__()
         self.recorder = recorder
         self.setWindowTitle("Click'n Fly - Live telemetry")
-        self.resize(900, 780)   # 4 stacked plots
+        self.resize(900, 950)   # 5 stacked plots
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -105,6 +136,7 @@ class LiveTelemetryWindow(QWidget):
         prev = None
         for row, (key, title, unit) in enumerate([('alt', 'altitude', 'm'),
                                                   ('spd', 'speed', 'm/s'),
+                                                  ('yawrate', 'yaw rate', 'rad/s'),
                                                   ('dist', 'distance to reference', 'm'),
                                                   ('mindist', 'min inter-drone distance', 'm')]):
             p = self.glw.addPlot(row=row, col=0)
@@ -124,7 +156,10 @@ class LiveTelemetryWindow(QWidget):
         self.mindist_curve = self.plots['mindist'].plot(
             [], [], pen=pg.mkPen('#E8ECEA', width=2), connect='finite')
 
-        self._per_drone_keys = ('alt', 'spd', 'dist')
+        self._per_drone_keys = ('alt', 'spd', 'yawrate', 'dist')
+        # measured series that also have a reference ("ghost") series, drawn
+        # dashed in the same colour so the tracking error is visible directly
+        self._ref_of = {'alt': 'alt_ref', 'spd': 'spd_ref', 'yawrate': 'yawrate_ref'}
         self.curves = {}   # (key, drone id) -> PlotDataItem
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh)
@@ -139,11 +174,18 @@ class LiveTelemetryWindow(QWidget):
             pass
         self.curves = {}
         for i, _id in enumerate(self.recorder.ids):
-            pen = pg.mkPen(_COLORS[i % len(_COLORS)], width=2)
+            color = _COLORS[i % len(_COLORS)]
+            pen = pg.mkPen(color, width=2)
+            ref_pen = pg.mkPen(color, width=1, style=Qt.PenStyle.DashLine)
             for key in self._per_drone_keys:
                 name = f'drone {_id}' if key == 'alt' else None
                 self.curves[(key, _id)] = self.plots[key].plot(
                     [], [], pen=pen, connect='finite', name=name)
+                ref_key = self._ref_of.get(key)
+                if ref_key:
+                    name = f'drone {_id} ref' if key == 'alt' else None
+                    self.curves[(ref_key, _id)] = self.plots[key].plot(
+                        [], [], pen=ref_pen, connect='finite', name=name)
 
     def _refresh(self):
         if not self.isVisible():
@@ -159,6 +201,10 @@ class LiveTelemetryWindow(QWidget):
             tmax = max(tmax, t[-1])
             for key in self._per_drone_keys:
                 self.curves[(key, _id)].setData(t, np.array(d[key], dtype=float))
+                ref_key = self._ref_of.get(key)
+                if ref_key:
+                    self.curves[(ref_key, _id)].setData(
+                        t, np.array(d[ref_key], dtype=float))
         g = self.recorder.gdata
         if g['t']:
             self.mindist_curve.setData(np.array(g['t']),
