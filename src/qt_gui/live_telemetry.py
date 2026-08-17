@@ -177,6 +177,13 @@ class LiveTelemetryWindow(QWidget):
         self.plots[self._keys[-1]].setLabel('bottom', 'time', units='s')
         self.legend = self.plots[self._keys[0]].addLegend()
 
+        # 'distance to reference' IS the tracking error, so it carries no ghost
+        # curve: perfect tracking is the zero line, drawn as the guide instead
+        if 'dist' in self.plots:
+            self.plots['dist'].addItem(pg.InfiniteLine(
+                pos=0.0, angle=0,
+                pen=pg.mkPen('#8B938F', style=Qt.PenStyle.DashLine)))
+
         # global (not per-drone) curve: the avoidance metric, with the 1m
         # safety-distance line the conflict detector uses as reference
         self.mindist_curve = None
