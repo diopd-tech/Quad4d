@@ -14,10 +14,12 @@ from itertools import combinations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QComboBox, QCheckBox, QPushButton)
 
 _SPEED_ALPHA = 0.3    # EMA smoothing of the speed estimate (same as drones_panel)
-_HISTORY_S = 120.     # seconds of history kept in the ring buffers
+_HISTORY_S = 300.     # seconds of history kept in the ring buffers (a whole
+                      # show, so the 'all' window and a look back are useful)
 _WINDOW_S = 60.       # seconds shown in the scrolling view
 _RECORD_HZ = 20       # Application.periodic() control rate, sizes the buffers
 
@@ -148,6 +150,7 @@ class LiveTelemetryWindow(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._build_controls())
         self.glw = pg.GraphicsLayoutWidget()
         layout.addWidget(self.glw)
 
@@ -161,6 +164,14 @@ class LiveTelemetryWindow(QWidget):
                 p.setXLink(prev)
             prev = p
             self.plots[key] = p
+            # scale Y to what is actually on screen, not to the whole recorded
+            # history: otherwise a past excursion flattens the live signal
+            vb = p.getViewBox()
+            vb.enableAutoRange(axis='y')
+            vb.setAutoVisible(y=True)
+            # a manual zoom/pan must not be fought by the scrolling: stop
+            # following as soon as the operator grabs a plot
+            vb.sigRangeChangedManually.connect(self._on_manual_range)
         self.plots[self._keys[-1]].setLabel('bottom', 'time', units='s')
         self.legend = self.plots[self._keys[0]].addLegend()
 
@@ -181,6 +192,53 @@ class LiveTelemetryWindow(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh)
         self.timer.start(200)
+
+    # --- view controls ---------------------------------------------------
+    def _build_controls(self):
+        """Time window / follow / reset strip above the plots."""
+        row = QHBoxLayout()
+        row.setContentsMargins(8, 6, 8, 0)
+        row.setSpacing(8)
+
+        self._window_s = _WINDOW_S
+        self.combo_window = QComboBox()
+        for label, span in (('30 s', 30.), ('1 min', 60.), ('2 min', 120.),
+                            ('5 min', 300.), ('all', None)):
+            self.combo_window.addItem(label, span)
+        self.combo_window.setCurrentIndex(1)          # 1 min, the old fixed view
+        self.combo_window.currentIndexChanged.connect(self._on_window_changed)
+
+        self.check_follow = QCheckBox('follow')
+        self.check_follow.setChecked(True)
+        self.check_follow.setToolTip(
+            'Keep the view on the latest data.\n'
+            'Zooming or panning a plot turns this off so the view stays put.')
+
+        btn_reset = QPushButton('reset zoom')
+        btn_reset.setToolTip('Back to the scrolling view, auto-scaled')
+        btn_reset.clicked.connect(self._reset_view)
+
+        row.addWidget(QLabel('window'))
+        row.addWidget(self.combo_window)
+        row.addWidget(self.check_follow)
+        row.addWidget(btn_reset)
+        row.addStretch(1)
+        return row
+
+    def _on_window_changed(self, _idx):
+        self._window_s = self.combo_window.currentData()
+        self.check_follow.setChecked(True)      # choosing a window means "follow"
+
+    def _on_manual_range(self, *_args):
+        # the operator took over: stop scrolling under their hands
+        self.check_follow.setChecked(False)
+
+    def _reset_view(self):
+        for p in self.plots.values():
+            vb = p.getViewBox()
+            vb.enableAutoRange(axis='y')
+            vb.setAutoVisible(y=True)
+        self.check_follow.setChecked(True)
 
     def _rebuild_curves(self):
         for (key, _id), curve in self.curves.items():
@@ -229,6 +287,9 @@ class LiveTelemetryWindow(QWidget):
             self.mindist_curve.setData(np.array(g['t']),
                                        np.array(g['mindist'], dtype=float))
             tmax = max(tmax, g['t'][-1])
-        if tmax > 0.:
-            self.plots[self._keys[0]].setXRange(
-                max(0., tmax - _WINDOW_S), max(1., tmax), padding=0)
+        # scroll only while following: a manual zoom/pan turns it off, so the
+        # operator can study a moment without the view sliding away
+        if tmax > 0. and self.check_follow.isChecked():
+            span = self._window_s
+            x0 = 0. if span is None else max(0., tmax - span)
+            self.plots[self._keys[0]].setXRange(x0, max(1., tmax), padding=0)
