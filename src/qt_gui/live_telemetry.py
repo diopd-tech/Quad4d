@@ -8,6 +8,8 @@
 # control rate. pyqtgraph is used instead of matplotlib because a full
 # matplotlib redraw is too slow for a live scrolling view.
 #
+import csv
+import logging
 import time
 from collections import deque
 from itertools import combinations
@@ -15,14 +17,19 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QComboBox, QCheckBox, QPushButton)
+                               QComboBox, QCheckBox, QPushButton, QToolButton,
+                               QMenu, QFileDialog, QMessageBox)
 # one colour per drone, shared with the drones panel and the 3D view so a
 # given drone looks the same in every view
 from drones_panel import DRONE_COLORS as _COLORS
 
+logger = logging.getLogger(__name__)
+
 _SPEED_ALPHA = 0.3    # EMA smoothing of the speed estimate (same as drones_panel)
-_HISTORY_S = 300.     # seconds of history kept in the ring buffers (a whole
-                      # show, so the 'all' window and a look back are useful)
+_HISTORY_S = 1200.    # seconds of history kept in the ring buffers: a whole
+                      # show stays in memory, so the CSV export covers it all
+                      # (~20 MB of buffers, and nothing is written to disk
+                      # unless the operator asks)
 _WINDOW_S = 60.       # seconds shown in the scrolling view
 _RECORD_HZ = 20       # Application.periodic() control rate, sizes the buffers
 
@@ -67,6 +74,63 @@ class TelemetryRecorder:
         self._speed = {}
         self._yaw = {}      # (yaw, t) of the previous sample, for the yaw rate
         self._yawrate = {}
+
+    # --- CSV export (on demand) ------------------------------------------
+    # Nothing is written unless the operator asks for it from the window's
+    # "..." menu, so no disk fills up in the background. What can be exported
+    # is what is still in the ring buffers, hence their generous length.
+    CSV_HEADER = ('t', 'drone', 'alt', 'alt_ref', 'spd', 'spd_ref',
+                  'yawrate', 'yawrate_ref', 'dist', 'mindist')
+
+    def export_csv(self, path):
+        """Write the recorded history to `path`: one row per drone per sample,
+        long format (a 'drone' column), with the global inter-drone distance
+        repeated on each row of a sample. Returns the number of rows."""
+        # global separation, looked up by timestamp so each row carries the
+        # value measured at that instant
+        gsep = dict(zip(self.gdata['t'], self.gdata['mindist']))
+        rows = 0
+        with open(path, 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(self.CSV_HEADER)
+            for _id in self.ids:
+                d = self.data.get(_id)
+                if not d:
+                    continue
+                for i, t in enumerate(d['t']):
+                    w.writerow([round(t, 3), _id]
+                               + [round(d[k][i], 4) for k in
+                                  ('alt', 'alt_ref', 'spd', 'spd_ref',
+                                   'yawrate', 'yawrate_ref', 'dist')]
+                               + [round(gsep.get(t, float('nan')), 4)])
+                    rows += 1
+        logger.info(f'telemetry exported to {path} ({rows} rows)')
+        return rows
+
+    def summary(self):
+        """Short report on the recorded history: how well each drone tracked,
+        how fast it went, and how close the drones came to each other."""
+        lines = []
+        for _id in self.ids:
+            d = self.data.get(_id)
+            if not d or not d['t']:
+                continue
+            spd = np.asarray(d['spd'], dtype=float)
+            dist = np.asarray(d['dist'], dtype=float)
+            if np.all(np.isnan(dist)):
+                lines.append(f'drone {_id}: top speed {np.nanmax(spd):.2f} m/s '
+                             '(no tracking recorded)')
+                continue
+            lines.append(f'drone {_id}: tracking error mean '
+                         f'{np.nanmean(dist):.2f} m / max {np.nanmax(dist):.2f} m, '
+                         f'top speed {np.nanmax(spd):.2f} m/s')
+        sep = np.asarray(self.gdata['mindist'], dtype=float)
+        if sep.size and not np.all(np.isnan(sep)):
+            lines.append(f'closest approach between drones: {np.nanmin(sep):.2f} m')
+        if self.gdata['t']:
+            span = self.gdata['t'][-1] - self.gdata['t'][0]
+            lines.append(f'recorded window: {span:.0f} s')
+        return lines
 
     def record(self, fd):
         now = time.time()
@@ -227,12 +291,46 @@ class LiveTelemetryWindow(QWidget):
         btn_reset.setToolTip('Back to the scrolling view, auto-scaled')
         btn_reset.clicked.connect(self._reset_view)
 
+        # "..." menu: the occasional actions (export, summary), kept out of the
+        # way since a flight is analysed whenever, not necessarily right after
+        self.btn_more = QToolButton()
+        self.btn_more.setText('⋮')
+        self.btn_more.setToolTip('More actions')
+        self.btn_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        more = QMenu(self.btn_more)
+        more.addAction('Export CSV...', self._export_csv)
+        more.addAction('Flight summary...', self._show_summary)
+        self.btn_more.setMenu(more)
+
         row.addWidget(QLabel('window'))
         row.addWidget(self.combo_window)
         row.addWidget(self.check_follow)
         row.addWidget(btn_reset)
         row.addStretch(1)
+        row.addWidget(self.btn_more)
         return row
+
+    def _export_csv(self):
+        default = time.strftime('telemetry_%Y%m%d_%H%M%S.csv')
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export telemetry', default, 'CSV files (*.csv);;All files (*)')
+        if not path:
+            return
+        try:
+            rows = self.recorder.export_csv(path)
+        except Exception as e:
+            QMessageBox.warning(self, 'Export failed', f'Could not write:\n{e}')
+            return
+        QMessageBox.information(
+            self, 'Telemetry exported',
+            f'{rows} rows written to\n{path}\n\n'
+            'One row per drone per sample; the "drone" column tells them apart.')
+
+    def _show_summary(self):
+        lines = self.recorder.summary()
+        QMessageBox.information(self, 'Flight summary',
+                                '\n'.join(lines) if lines else
+                                'Nothing recorded yet.')
 
     def _on_window_changed(self, _idx):
         self._window_s = self.combo_window.currentData()
