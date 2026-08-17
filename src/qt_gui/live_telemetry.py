@@ -23,6 +23,19 @@ _RECORD_HZ = 20       # Application.periodic() control rate, sizes the buffers
 
 _COLORS = ["#1E78B3", "#FF800E", "#2BA02B"]   # same palette as 3D view / drones panel
 
+# The available plots, in display order: key -> (axis label, unit). The window
+# shows all of them by default, or only the ones asked for, so the operator can
+# open a single parameter full-height instead of squinting at the overview.
+PLOTS = (('alt',     'altitude',                  'm'),
+         ('spd',     'speed',                     'm/s'),
+         ('yawrate', 'yaw rate',                  'rad/s'),
+         ('dist',    'distance to reference',     'm'),
+         ('mindist', 'min inter-drone distance',  'm'))
+PLOT_TITLES = {k: t for k, t, _u in PLOTS}
+# per-drone series (the rest is global) and their reference ("ghost") twin
+_PER_DRONE = {'alt', 'spd', 'yawrate', 'dist'}
+_REF_OF = {'alt': 'alt_ref', 'spd': 'spd_ref', 'yawrate': 'yawrate_ref'}
+
 
 class TelemetryRecorder:
     """Ring buffers of measured drone state.
@@ -121,11 +134,17 @@ class LiveTelemetryWindow(QWidget):
     control loop. Closing the window just hides it; history keeps
     accumulating in the recorder."""
 
-    def __init__(self, recorder):
+    def __init__(self, recorder, keys=None, title=None):
+        """`keys` selects which of PLOTS to show (default: all of them), so the
+        same window serves both the overview and a single-parameter view."""
         super().__init__()
         self.recorder = recorder
-        self.setWindowTitle("Click'n Fly - Live telemetry")
-        self.resize(900, 950)   # 5 stacked plots
+        specs = [(k, t, u) for k, t, u in PLOTS if keys is None or k in keys]
+        if not specs:                      # unknown selection: fall back to all
+            specs = list(PLOTS)
+        self._keys = [k for k, _t, _u in specs]
+        self.setWindowTitle(title or "Click'n Fly - Live telemetry")
+        self.resize(900, min(950, 220 + 180 * len(specs)))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -134,32 +153,30 @@ class LiveTelemetryWindow(QWidget):
 
         self.plots = {}
         prev = None
-        for row, (key, title, unit) in enumerate([('alt', 'altitude', 'm'),
-                                                  ('spd', 'speed', 'm/s'),
-                                                  ('yawrate', 'yaw rate', 'rad/s'),
-                                                  ('dist', 'distance to reference', 'm'),
-                                                  ('mindist', 'min inter-drone distance', 'm')]):
+        for row, (key, title_, unit) in enumerate(specs):
             p = self.glw.addPlot(row=row, col=0)
-            p.setLabel('left', title, units=unit)
+            p.setLabel('left', title_, units=unit)
             p.showGrid(x=True, y=True, alpha=0.3)
             if prev is not None:
                 p.setXLink(prev)
             prev = p
             self.plots[key] = p
-        self.plots['mindist'].setLabel('bottom', 'time', units='s')
-        self.legend = self.plots['alt'].addLegend()
+        self.plots[self._keys[-1]].setLabel('bottom', 'time', units='s')
+        self.legend = self.plots[self._keys[0]].addLegend()
 
         # global (not per-drone) curve: the avoidance metric, with the 1m
         # safety-distance line the conflict detector uses as reference
-        self.plots['mindist'].addItem(pg.InfiniteLine(
-            pos=1.0, angle=0, pen=pg.mkPen('#F2A33C', style=Qt.PenStyle.DashLine)))
-        self.mindist_curve = self.plots['mindist'].plot(
-            [], [], pen=pg.mkPen('#E8ECEA', width=2), connect='finite')
+        self.mindist_curve = None
+        if 'mindist' in self.plots:
+            self.plots['mindist'].addItem(pg.InfiniteLine(
+                pos=1.0, angle=0, pen=pg.mkPen('#F2A33C', style=Qt.PenStyle.DashLine)))
+            self.mindist_curve = self.plots['mindist'].plot(
+                [], [], pen=pg.mkPen('#E8ECEA', width=2), connect='finite')
 
-        self._per_drone_keys = ('alt', 'spd', 'yawrate', 'dist')
+        self._per_drone_keys = tuple(k for k in self._keys if k in _PER_DRONE)
         # measured series that also have a reference ("ghost") series, drawn
         # dashed in the same colour so the tracking error is visible directly
-        self._ref_of = {'alt': 'alt_ref', 'spd': 'spd_ref', 'yawrate': 'yawrate_ref'}
+        self._ref_of = _REF_OF
         self.curves = {}   # (key, drone id) -> PlotDataItem
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh)
@@ -177,20 +194,22 @@ class LiveTelemetryWindow(QWidget):
             color = _COLORS[i % len(_COLORS)]
             pen = pg.mkPen(color, width=2)
             ref_pen = pg.mkPen(color, width=1, style=Qt.PenStyle.DashLine)
+            legend_key = self._per_drone_keys[0] if self._per_drone_keys else None
             for key in self._per_drone_keys:
-                name = f'drone {_id}' if key == 'alt' else None
+                name = f'drone {_id}' if key == legend_key else None
                 self.curves[(key, _id)] = self.plots[key].plot(
                     [], [], pen=pen, connect='finite', name=name)
                 ref_key = self._ref_of.get(key)
                 if ref_key:
-                    name = f'drone {_id} ref' if key == 'alt' else None
+                    name = f'drone {_id} ref' if key == legend_key else None
                     self.curves[(ref_key, _id)] = self.plots[key].plot(
                         [], [], pen=ref_pen, connect='finite', name=name)
 
     def _refresh(self):
         if not self.isVisible():
             return
-        if {i for (_k, i) in self.curves} != set(self.recorder.ids):
+        if (self._per_drone_keys
+                and {i for (_k, i) in self.curves} != set(self.recorder.ids)):
             self._rebuild_curves()
         tmax = 0.
         for _id in self.recorder.ids:
@@ -206,8 +225,10 @@ class LiveTelemetryWindow(QWidget):
                     self.curves[(ref_key, _id)].setData(
                         t, np.array(d[ref_key], dtype=float))
         g = self.recorder.gdata
-        if g['t']:
+        if self.mindist_curve is not None and g['t']:
             self.mindist_curve.setData(np.array(g['t']),
                                        np.array(g['mindist'], dtype=float))
+            tmax = max(tmax, g['t'][-1])
         if tmax > 0.:
-            self.plots['alt'].setXRange(max(0., tmax - _WINDOW_S), max(1., tmax), padding=0)
+            self.plots[self._keys[0]].setXRange(
+                max(0., tmax - _WINDOW_S), max(1., tmax), padding=0)

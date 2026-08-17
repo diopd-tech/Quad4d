@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
 from drones_panel import DronesPanel
 import view_three_d as vtd
 import view_chronograms as view_chrono
-from live_telemetry import TelemetryRecorder, LiveTelemetryWindow
+from live_telemetry import (TelemetryRecorder, LiveTelemetryWindow,
+                            PLOTS as LIVE_PLOTS, PLOT_TITLES as LIVE_TITLES)
 
 logger = logging.getLogger(__name__)
 
@@ -190,18 +191,27 @@ class OperatorWindow(QMainWindow):
             'output_chrono': (view_chrono.OutputChronogram, 'Output chronogram'),
         }
         self.view_menu = QMenu(self)
+        # plain actions, not checkboxes: a click opens (or raises) the view and
+        # its own close button closes it. A checkable entry went stale as soon
+        # as the window was closed from its title bar.
         for key, (_cls, title) in self._chrono_specs.items():
             act = self.view_menu.addAction(title)
-            act.setCheckable(True)
-            act.toggled.connect(lambda checked, k=key: self._toggle_chronogram(k, checked))
+            act.triggered.connect(lambda _checked=False, k=key: self._show_chronogram(k))
 
-        # live telemetry: recorder runs from startup (fed by periodic()),
-        # the window is opened on demand with the history already there
+        # live telemetry: recorder runs from startup (fed by periodic()), the
+        # windows are opened on demand with the history already there. Beside
+        # the overview, each parameter can be opened alone, full height.
         self.telemetry_recorder = TelemetryRecorder(self.fd.ids)
-        self._live_telemetry_win = None
+        self._live_wins = {}
         self.view_menu.addSeparator()
-        live_act = self.view_menu.addAction("Live telemetry")
-        live_act.triggered.connect(self._show_live_telemetry)
+        live_menu = self.view_menu.addMenu("Live telemetry")
+        act = live_menu.addAction("Overview (all)")
+        act.triggered.connect(lambda _checked=False: self._show_live_telemetry())
+        live_menu.addSeparator()
+        for key, title, _unit in LIVE_PLOTS:
+            act = live_menu.addAction(title[:1].upper() + title[1:])
+            act.triggered.connect(
+                lambda _checked=False, k=key: self._show_live_telemetry(k))
 
         root = QWidget()
         root.setObjectName("root")
@@ -320,15 +330,18 @@ class OperatorWindow(QMainWindow):
         win.show()
         win.raise_()
 
-    def _toggle_chronogram(self, key, checked):
-        # always tear down and rebuild fresh: the chronogram widgets add new
-        # plot lines on each display_new_trajectory, so reusing a window would
-        # accumulate stale lines across scenario changes
-        existing = self._chrono_windows.pop(key, None)
-        if existing is not None:
-            existing.close()
-        if checked:
-            self._open_chronogram(key)
+    def _show_chronogram(self, key):
+        """Open the chronogram, or raise it if it is already up."""
+        win = self._chrono_windows.get(key)
+        if win is not None and win.isVisible():
+            win.raise_(); win.activateWindow()
+            return
+        # rebuild fresh: the chronogram widgets add new plot lines on each
+        # display_new_trajectory, so reusing a window would accumulate stale
+        # lines across scenario changes
+        if win is not None:
+            self._chrono_windows.pop(key).close()
+        self._open_chronogram(key)
 
     def _refresh_chronograms(self):
         for key in list(self._chrono_windows.keys()):
@@ -338,11 +351,21 @@ class OperatorWindow(QMainWindow):
             if visible:
                 self._open_chronogram(key)
 
-    def _show_live_telemetry(self):
-        if self._live_telemetry_win is None:
-            self._live_telemetry_win = LiveTelemetryWindow(self.telemetry_recorder)
-        self._live_telemetry_win.show()
-        self._live_telemetry_win.raise_()
+    def _show_live_telemetry(self, key=None):
+        """Open (or raise) a live telemetry window: the overview when `key` is
+        None, else that single parameter on its own."""
+        name = key or 'all'
+        win = self._live_wins.get(name)
+        if win is None:
+            title = ("Click'n Fly - Live telemetry" if key is None else
+                     f"Click'n Fly - {LIVE_TITLES.get(key, key)}")
+            win = LiveTelemetryWindow(self.telemetry_recorder,
+                                      keys=None if key is None else [key],
+                                      title=title)
+            self._live_wins[name] = win
+        win.show()
+        win.raise_()
+        win.activateWindow()
 
     def record_live_telemetry(self, fd):
         self.telemetry_recorder.record(fd)
@@ -350,8 +373,8 @@ class OperatorWindow(QMainWindow):
     def closeEvent(self, event):
         for win in self._chrono_windows.values():
             win.close()
-        if self._live_telemetry_win is not None:
-            self._live_telemetry_win.close()
+        for win in self._live_wins.values():
+            win.close()
         self.app.on_quit()
         event.accept()
 
