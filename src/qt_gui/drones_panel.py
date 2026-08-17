@@ -49,7 +49,11 @@ def _state_icon(kind, state, size=_ICON_SIZE):
 
 
 
-_DEFAULT_COLORS = ["#FFD400", "#00E676", "#D500F9"]   # yellow / green / violet
+# Drone colours, by slot. Single source of truth for every view that draws
+# per-drone data (this panel, the 3D trajectories, the live telemetry curves),
+# so a drone keeps the same colour everywhere.
+DRONE_COLORS = ["#FFD400", "#00E676", "#D500F9"]      # yellow / green / violet
+_DEFAULT_COLORS = DRONE_COLORS
 
 _VALUE = "#C7D0CB"
 _MUTED = "#8B938F"

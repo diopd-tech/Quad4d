@@ -16,6 +16,9 @@ import pyqtgraph as pg
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QCheckBox, QPushButton)
+# one colour per drone, shared with the drones panel and the 3D view so a
+# given drone looks the same in every view
+from drones_panel import DRONE_COLORS as _COLORS
 
 _SPEED_ALPHA = 0.3    # EMA smoothing of the speed estimate (same as drones_panel)
 _HISTORY_S = 300.     # seconds of history kept in the ring buffers (a whole
@@ -23,7 +26,6 @@ _HISTORY_S = 300.     # seconds of history kept in the ring buffers (a whole
 _WINDOW_S = 60.       # seconds shown in the scrolling view
 _RECORD_HZ = 20       # Application.periodic() control rate, sizes the buffers
 
-_COLORS = ["#1E78B3", "#FF800E", "#2BA02B"]   # same palette as 3D view / drones panel
 
 # The available plots, in display order: key -> (axis label, unit). The window
 # shows all of them by default, or only the ones asked for, so the operator can
