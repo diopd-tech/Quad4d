@@ -778,18 +778,23 @@ class Application(QApplication):
         # The in-flight critical auto-land (periodic) still covers a pack
         # draining mid-show, whatever was decided here.
         def _packs(state):
-            return [(str(_id), self.fd.acs[_id].battery_v) for _id in self.fd.ids
-                    if battery_state(getattr(self.fd.acs[_id], 'battery_v', None),
-                                     getattr(self.fd.acs[_id], 'batt_limits', None)) == state]
+            # voltages reported per cell, like the drones panel
+            out = []
+            for _id in self.fd.ids:
+                ac = self.fd.acs[_id]
+                v, lim = getattr(ac, 'battery_v', None), getattr(ac, 'batt_limits', None)
+                if battery_state(v, lim) == state:
+                    out.append((str(_id), lim.per_cell(v) if lim else v))
+            return out
         crit, low = _packs('bad'), _packs('warn')
         if crit:
-            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in crit)
+            detail = ', '.join(f'{_id} ({v:.2f}V/cell)' for _id, v in crit)
             self.operator_view.log_text(
                 f'START BLOCKED: battery CRITICAL on drone(s) {detail} '
                 f'- swap the pack(s) before launching')
             return
         if low:
-            detail = ', '.join(f'{_id} ({v:.1f}V)' for _id, v in low)
+            detail = ', '.join(f'{_id} ({v:.2f}V/cell)' for _id, v in low)
             answer = QMessageBox.question(
                 self.operator_view, 'Batterie basse',
                 f'Batterie basse sur le(s) drone(s) {detail}.\n\n'

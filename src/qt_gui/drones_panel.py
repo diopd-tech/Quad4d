@@ -256,10 +256,14 @@ class _DroneRow(QFrame):
             batt_color, batt_bold = _BATT_CRIT_COLOR, True
         elif bstate == "warn":
             batt_color = _BATT_LOW_COLOR
+        # per cell, not pack: 4.2 V full / 3.5 V low reads the same whatever
+        # the pack size (the tooltip keeps the pack voltage)
+        lim = limits or _DEFAULT_LIMITS
         self.lbl_metrics.setText(
             cell("alt", alt, "m", "%.2f") + "   "
             + cell("spd", spd, "m/s", "%.1f") + "   "
-            + cell("batt", batt, "V", "%.1f", batt_color, batt_bold))
+            + cell("batt", lim.per_cell(batt), "V/cell", "%.2f",
+                   batt_color, batt_bold))
 
 
 class DronesPanel(QGroupBox):
@@ -355,9 +359,14 @@ class DronesPanel(QGroupBox):
         if bstate == "unknown":
             items.append(("battery", "unknown", "no ROTORCRAFT_STATUS seen yet"))
         else:
-            detail = {"ok": f"{v:.1f}V ok",
-                      "warn": f"{v:.1f}V low (< {lim.low:.1f}V): plan to land",
-                      "bad": f"{v:.1f}V CRITICAL (< {lim.crit:.1f}V): land now"}[bstate]
+            pc, pack = lim.per_cell(v), f"{v:.1f}V pack, {lim.cells}S"
+            detail = {
+                "ok":   f"{pc:.2f}V/cell ok ({pack})",
+                "warn": (f"{pc:.2f}V/cell low (< {lim.low_per_cell:.2f}): "
+                         f"plan to land ({pack})"),
+                "bad":  (f"{pc:.2f}V/cell CRITICAL (< {lim.crit_per_cell:.2f}): "
+                         f"land now ({pack})"),
+            }[bstate]
             items.append(("battery", bstate, detail))
 
         return items

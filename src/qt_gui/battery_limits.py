@@ -23,11 +23,31 @@ DEFAULT_LOW_V  = 3.5 * 3   # 10.5V: plan to land
 DEFAULT_CRIT_V = 3.3 * 3   # 9.9V: land now
 
 
-class BatteryLimits:
-    """Land-soon ('low') and land-now ('crit') pack voltages for one drone."""
+FULL_CELL_V = 4.2          # a LiPo cell, fully charged
+DEFAULT_CELLS = 3          # the lab packs are 3S
 
-    def __init__(self, low=DEFAULT_LOW_V, crit=DEFAULT_CRIT_V, source='default'):
+
+class BatteryLimits:
+    """Land-soon ('low') and land-now ('crit') pack voltages for one drone,
+    plus its cell count so voltages can be shown per cell -- 4.2 V full,
+    3.5 V low reads the same whatever the pack size."""
+
+    def __init__(self, low=DEFAULT_LOW_V, crit=DEFAULT_CRIT_V,
+                 cells=DEFAULT_CELLS, source='default'):
         self.low, self.crit, self.source = float(low), float(crit), source
+        self.cells = max(1, int(cells))
+
+    def per_cell(self, v):
+        """Pack voltage -> volts per cell (None stays None)."""
+        return None if v is None else v / self.cells
+
+    @property
+    def low_per_cell(self):
+        return self.low / self.cells
+
+    @property
+    def crit_per_cell(self):
+        return self.crit / self.cells
 
     def state(self, v):
         """Classify a pack voltage: 'unknown' | 'bad' | 'warn' | 'ok'."""
@@ -92,6 +112,11 @@ def from_airframe(conf):
         logger.warning(f'aircraft {ac_id}: inconsistent BAT thresholds in the '
                        f'airframe (low={low}, critic={crit}); using defaults')
         return BatteryLimits()
-    limits = BatteryLimits(low, crit, source='airframe')
+    # cell count, to show volts per cell: from the full-charge voltage when the
+    # airframe gives it, else inferred from the low threshold (~3.5 V/cell)
+    maxv = defines.get('MAX_BAT_LEVEL')
+    cells = round(maxv / FULL_CELL_V) if maxv else round(low / 3.5)
+    cells = min(max(int(cells), 1), 12)
+    limits = BatteryLimits(low, crit, cells, source='airframe')
     logger.info(f'aircraft {ac_id}: battery thresholds {limits}')
     return limits
