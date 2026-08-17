@@ -30,6 +30,11 @@ mkdir -p "$(dirname "$log")"
         echo "venv: none found at $venv (using the system python)"
     fi
 
+    # A desktop session has no PYTHONPATH at all, so the usual .bashrc idiom
+    # (PYTHONPATH=$PYTHONPATH:/some/path) would trip `set -u` in the env file.
+    # Define it, empty, so appending to it always works.
+    export PYTHONPATH="${PYTHONPATH:-}"
+
     env_file="${XDG_CONFIG_HOME:-$HOME/.config}/clicknfly.env"
     if [ -f "$env_file" ]; then
         # shellcheck disable=SC1090
