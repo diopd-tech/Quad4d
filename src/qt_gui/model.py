@@ -50,7 +50,8 @@ class Model:
             self.load_from_factory(traj_fact_id)
         self.fdm = p_mfdm.MR_FDM()
         self.arena = Arena(arena_cfg)
-        self.conflict_detector = ConflictDetector(safety_distance=1.2)
+        # the safety distance is set per call, in detect_conflicts()
+        self.conflict_detector = ConflictDetector()
        
     def load_from_factory(self, name, chapter=None, idx=None):
         trajectory = traj_factory.TrajFactory.get(name, chapter)()

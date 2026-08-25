@@ -8,17 +8,16 @@
 # Geometry is never touched. Transits pick their own mode automatically
 # (sequencing, staggered departures or height layering), see start_transit.
 #
-import sys, time, signal, logging, yaml, argparse
+import sys, time, signal, logging, argparse
 import numpy as np
 from enum import Enum
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QDialog, QMessageBox
-from PySide6.QtCore import QRunnable, QThreadPool, QTimer, Slot, Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QGuiApplication
 QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-# https://www.pythonguis.com/tutorials/multithreading-pyside6-applications-qthreadpool/
 
-import traj_factory, misc_utils as mu
+import misc_utils as mu
 import view_three_d as vtd, model
 import scenarios as cnf_scen
 import pat3.algebra as p_al
@@ -158,16 +157,6 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-# class Worker(QRunnable):
-#     def __init__(self, trajectory, traj_manager, dt=1./10):
-#         super().__init__()
-        
-#     @Slot()
-#     def run(self):
-#         time.sleep(1)
-#         print('worker exiting')
-
-
 DroneStatus = Enum('DroneStatus', [('UNKNOWN', 1), ('CONNECTED', 2), ('READY', 3), ('CRUISING', 4), ('ARRIVED', 5)])
 class Drone:
     def __init__(self):
@@ -240,7 +229,7 @@ class Drone:
 
     def set_pose(self, T):
         self.T=T
-        self.vehicle_traj.append(mu.pos_of_T(T)) # FIXME: limit size
+        self.vehicle_traj.append(mu.pos_of_T(T))
         if len(self.vehicle_traj) > self.vehicle_traj_max_len:
             self.vehicle_traj = self.vehicle_traj[self.vehicle_traj_increment:]
 
@@ -353,7 +342,6 @@ class FlightDirector:
         T = np.eye(4); T[:3,3] = pos_enu; T[:3,:3] = rmat_enu2flu            
         try:
             ac = self.acs[int(sender)]
-            #print("pose bine mis à jour")
         except KeyError: return # unknown
         ac.pose_source = 'external'
         ac.t_last_ext_pose = time.time()
@@ -674,9 +662,6 @@ class Application(QApplication):
         self.operator_view.log_text(
             'Deconfliction: on-path lambda scheduling (run the safety check)')
 
-        #self.threadpool = QThreadPool()
-        #self.worker = None
-
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.periodic)
         self.timer.start(50)
@@ -769,8 +754,6 @@ class Application(QApplication):
             self.operator_view.log_text(f'KILL {ac_id}: FAILED (see terminal log)')
 
     def on_guide_clicked(self):
-        #self.worker = Worker(self.model.get_trajectory(), self.traj_manager)
-        #self.threadpool.start(self.worker)
         # battery gate (operator safety), in two steps:
         #  - CRITICAL pack (land-now band): hard refusal, no override. The drone
         #    may drop out of the sky; swapping is the only answer.
@@ -846,7 +829,11 @@ class Application(QApplication):
     def resolve_conflicts_hook(self, safety_distance=1.0):
         """Called by the operator window's safety check: schedule away
         the conflicts by pausing drones on their paths (lambda holds),
-        then propagate the new durations to the flight director."""
+        then propagate the new durations to the flight director.
+
+        safety_distance is accepted for the hook's signature but ignored:
+        scheduling uses the tuned SCHED_* constants above, which have to
+        stay consistent with one another."""
         ok, report = sd.resolve_conflicts_spatial(self.model,
                                                   safety_distance=SCHED_SAFETY_DIST,
                                                   standoff=SCHED_STANDOFF,
@@ -1060,7 +1047,6 @@ def main():
     logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
     cnf = Application(args)
     def _quit(sig, frame):
-        #print(chr(8)+chr(8),end="") # remove ^C from console... nope...
         logger.debug('Keyboard interrupt')
         cnf.on_quit()
         sys.exit()

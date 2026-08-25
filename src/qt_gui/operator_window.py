@@ -3,13 +3,13 @@
 
 import logging
 import os
-from PySide6.QtCore import QTimer, Qt, QSize, QEvent
+from PySide6.QtCore import Qt, QSize, QEvent
 from PySide6.QtGui import QPixmap, QPainter, QIcon, QColor
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                                QProgressBar, QPlainTextEdit, QGroupBox, QMenu,
                                QGridLayout, QSlider,
-                               QVBoxLayout, QHBoxLayout, QFrame, QScrollArea)
+                               QVBoxLayout, QHBoxLayout)
 from drones_panel import DronesPanel
 import view_three_d as vtd
 import view_chronograms as view_chrono

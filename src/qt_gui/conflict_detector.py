@@ -12,14 +12,14 @@ class ConflictDetector:
         if not drones_dict or len(drones_dict) < 2:
             return True, []  # No conflict here since it's only one drone or none
 
-        if duration is None: 
-            duration = ([getattr(traj, 'duration', 21.0) for traj in drones_dict.values()])
-            max_duration = max(duration)
+        if duration is None:
+            duration = max(getattr(traj, 'duration', 21.0)
+                           for traj in drones_dict.values())
 
         conflicts = []
         drones_ids = list(drones_dict.keys())
 
-        for t in np.arange(0, max_duration, self.time_step):
+        for t in np.arange(0, duration, self.time_step):
             positions = {}
             for d_id in drones_ids:
                 traj = drones_dict[d_id]
