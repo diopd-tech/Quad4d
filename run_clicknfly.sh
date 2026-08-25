@@ -4,7 +4,7 @@
 #
 # Reproduces the manual procedure:
 #     source ~/venv_quad4d/bin/activate
-#     cd <repo>/src/qt_gui && ./click_n_fly3.py
+#     cd <repo>/src/qt_gui && ./click_n_fly.py
 #
 # The repo path is resolved from this script's own location, so the launcher
 # keeps working if the repo moves. Overridable:
@@ -43,8 +43,8 @@ mkdir -p "$(dirname "$log")"
     fi
 
     cd "$here/src/qt_gui" || exit 1
-    echo "running: ./click_n_fly3.py $*"
-    ./click_n_fly3.py "$@"
+    echo "running: ./click_n_fly.py $*"
+    ./click_n_fly.py "$@"
 } >>"$log" 2>&1
 rc=$?
 

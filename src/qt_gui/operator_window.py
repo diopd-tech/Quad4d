@@ -553,7 +553,7 @@ class OperatorWindow(QMainWindow):
         self.progress.setValue(0)
 
         # paired layout instead of a tall stack (kill moved into the
-        # drones panel). Single-preflight apps (click_n_fly3) get the
+        # drones panel). Single-preflight apps (click_n_fly) get the
         # exact pairing the operator asked for:
         #   take off | launch          motors | take off
         #   stop     | land     or     launch | stop        (2-preflight)
@@ -618,7 +618,7 @@ class OperatorWindow(QMainWindow):
     def run_safety_check(self):
         self.log_text("Trajectory analysis in progress...")
         conflicts = self.model.detect_conflicts(safety_distance=1.0)
-        # apps can provide their own resolution strategy (e.g. click_n_fly3's
+        # apps can provide their own resolution strategy (e.g. click_n_fly's
         # lambda scheduling); without a hook, behavior is detection-only
         hook = getattr(self.app, 'resolve_conflicts_hook', None)
         if conflicts and hook is not None:
