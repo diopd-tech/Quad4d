@@ -45,9 +45,15 @@ la convention du laboratoire :
 mkdir -p ~/work && git clone https://github.com/poine/pat.git ~/work/pat
 ```
 
-Attention au nom : le dépôt s'appelle `pat`, le module Python `pat3`. Et ce
-n'est pas le même dépôt que celui de cette application, bien que tous deux
-soient de Antoine Drouin.
+Deux pièges à cet endroit :
+
+- le dépôt s'appelle `pat`, le module Python `pat3` ;
+- **le module est dans `src/`, pas à la racine.** C'est donc `pat/src` qu'il
+  faudra mettre dans le `PYTHONPATH`, sans quoi l'import échoue alors même que
+  le dépôt est bien cloné.
+
+Ce n'est pas non plus le même dépôt que celui de cette application, bien que
+tous deux soient d'Antoine Drouin.
 
 **3. L'environnement Python.** Le lanceur cherche `~/venv_quad4d` par défaut :
 
@@ -64,7 +70,7 @@ dédié, `~/.config/clicknfly.env`, que le lanceur charge à chaque démarrage.
 ```bash
 mkdir -p ~/.config
 cat > ~/.config/clicknfly.env <<'EOF'
-export PYTHONPATH="$PYTHONPATH:$HOME/work/pat"
+export PYTHONPATH="$PYTHONPATH:$HOME/work/pat/src"
 export PYTHONPATH="$PYTHONPATH:/chemin/vers/paparazzi/sw/lib/python"
 export PAPARAZZI_HOME="/chemin/vers/paparazzi"
 EOF
