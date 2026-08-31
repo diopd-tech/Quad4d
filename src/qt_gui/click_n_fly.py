@@ -638,7 +638,7 @@ class Application(QApplication):
         super().__init__(sys.argv)
         #super().__init__(args)
         self.setApplicationDisplayName("ClicknFly")
-        self.setApplicationName("ClicknFly3")
+        self.setApplicationName("ClicknFly")
 
         picker = ScenarioPickerDialog(cnf_scen.scenarios, preselect=int(args.scen))
         if picker.exec() != QDialog.DialogCode.Accepted:
