@@ -63,6 +63,12 @@ source ~/venv_quad4d/bin/activate
 pip install pyyaml numpy scipy matplotlib pyside6 numpy_stl pyqtgraph pyopengl ivy-python lxml
 ```
 
+Si `pip` échoue sur `[Errno 101] Le réseau n'est pas accessible`, la machine
+n'atteint pas PyPI. Le clonage de l'étape 2 peut très bien avoir réussi malgré
+tout : il passe par SSH, alors que `pip` passe par HTTPS, et les deux ne sont
+pas filtrés pareil. Cherchez un proxy avec `env | grep -i proxy`, et le cas
+échéant ajoutez `--proxy http://LE_PROXY:PORT` à la commande `pip`.
+
 **4. Les chemins vers pat et Paparazzi.** Un lancement par icône ne lit pas
 votre `~/.bashrc` : le `PYTHONPATH` doit donc être déclaré dans un fichier
 dédié, `~/.config/clicknfly.env`, que le lanceur charge à chaque démarrage.
@@ -87,6 +93,12 @@ Pour vérifier, sans quitter le venv :
 source ~/.config/clicknfly.env && python3 -c "import pat3; print(pat3.__file__)"
 ```
 
+Un mot sur les blocs `cat > ... <<'EOF'` : collés d'un seul tenant dans un
+terminal, ils s'écrasent parfois sur une seule ligne et produisent un fichier
+inutilisable, ou un `cat: export: Aucun fichier ou dossier de ce nom`. Si cela
+arrive, écrivez le fichier avec un éditeur (`nano ~/.config/clicknfly.env`)
+plutôt que de vous acharner au collage.
+
 **5. L'icône de bureau.** Une seule commande, à lancer depuis la racine du
 dépôt :
 
@@ -102,14 +114,39 @@ Le script résout tout seul le chemin du dépôt : si vous le lancez depuis un
 autre clone, l'icône bascule vers celui-là. Il n'existe qu'une entrée de bureau,
 la précédente est remplacée.
 
+**6. Vérifier.** Fermez le terminal, ouvrez-en un neuf, et lancez par l'icône.
+Elle doit démarrer dans un terminal qui n'a rien préparé : c'est le seul test
+qui prouve que l'installation tient debout.
+
 ## Lancer
 
-Par l'icône, ou en console :
+**Par l'icône**, et c'est la procédure d'exploitation. Le lanceur active le
+venv et charge `clicknfly.env` lui-même, à chaque démarrage : il n'y a rien à
+taper, et rien à préparer.
+
+**En console**, il faut en revanche fournir soi-même ce que le lanceur fait
+tout seul :
 
 ```bash
 source ~/venv_quad4d/bin/activate
 cd src/qt_gui && ./click_n_fly.py
 ```
+
+Le venv et le `PYTHONPATH` sont des propriétés **du terminal**, pas de la
+machine : ils disparaissent quand on le ferme, et un terminal neuf n'en sait
+rien. C'est pourquoi l'icône fonctionne alors qu'un `./click_n_fly.py` lancé
+dans une fenêtre fraîche échoue sur `ModuleNotFoundError: pat3` — les deux
+chemins de lancement ne préparent pas le même environnement.
+
+Pour ne plus avoir à y penser en console, faites charger les chemins par
+chaque nouveau terminal, une fois pour toutes :
+
+```bash
+echo '[ -f "$HOME/.config/clicknfly.env" ] && . "$HOME/.config/clicknfly.env"' >> ~/.bashrc
+```
+
+Le venv, lui, reste à activer à la main : on ne veut pas qu'il s'impose à tous
+les shells de la machine.
 
 Options utiles :
 
