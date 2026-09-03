@@ -66,8 +66,18 @@ default:
 ```bash
 python3 -m venv ~/venv_quad4d
 source ~/venv_quad4d/bin/activate
+pip install pyyaml numpy scipy matplotlib pyside6 numpy-stl pyqtgraph pyopengl ivy-python lxml
+```
+
+The same list sits in `src/qt_gui/requirements.txt`, so this does the same
+thing if you prefer it:
+
+```bash
 pip install -r src/qt_gui/requirements.txt
 ```
+
+Neither pulls in pat or Paparazzi: neither is on PyPI, and step 4 reaches them
+through `PYTHONPATH` instead.
 
 If `pip` fails with `[Errno 101] Network is unreachable`, the machine cannot
 reach PyPI. The clone in step 2 may well have succeeded regardless: it goes over
